@@ -16,9 +16,8 @@ from pywps import LiteralInput,LiteralOutput
 # to do updates that involve list of entries (not tested yet)
 
 # base_search_URL in the ESGF Search API is now a solr database URL,
-# probably from a config file in the platform rather than an input?
-# For now let's set it manually here:
-solr_server = 'http://132.217.140.45:8983/solr/birdhouse/'
+# this is provided as the environment variable SOLR_SERVER.
+solr_server = "http://%s:8983/solr/birdhouse/" % (os.environ['SOLR_SERVER'],)
 # The place where we save the resulting json files should also be in
 # a config file, the user under which apache is running must be able
 # to write to that directory.

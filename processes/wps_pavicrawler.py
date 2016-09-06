@@ -23,17 +23,21 @@ my_facets = ['experiment','frequency','institute','model','project']
 # in the global attributes, need to come back for this later...
 
 # base_search_URL in the ESGF Search API is now a solr database URL,
-# probably from a config file in the platform rather than an input?
-# For now let's set it manually here:
-solr_server = 'http://132.217.140.45:8983/solr/birdhouse/'
+# this is provided as the environment variable SOLR_SERVER.
+solr_server = "http://%s:8983/solr/birdhouse/" % (os.environ['SOLR_SERVER'],)
 # The place where we save the resulting json files should also be in
 # a config file, the user under which apache is running must be able
 # to write to that directory.
 json_output_path = '/var/www/html/wps_results'
 json_output_url = 'http://localhost/wps_results/'
 
-internal_ip = '192.168.101.179'
-external_ip = '132.217.140.45'
+# Fix for OpenStack internal/external ip:
+# (the internal ip is the environment variable OPENSTACK_INTERNAL_IP)
+if os.environ.has_key('OPENSTACK_INTERNAL_IP'):
+    internal_ip = os.environ['OPENSTACK_INTERNAL_IP']
+else:
+    internal_ip = os.environ['SOLR_SERVER']
+external_ip = os.environ['SOLR_SERVER']
 
 class PavicsCrawler(Process):
     def __init__(self):
