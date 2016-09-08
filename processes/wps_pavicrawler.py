@@ -29,7 +29,7 @@ solr_server = "http://%s:8983/solr/birdhouse/" % (os.environ['SOLR_SERVER'],)
 # a config file, the user under which apache is running must be able
 # to write to that directory.
 json_output_path = '/var/www/html/wps_results'
-json_output_url = 'http://localhost/wps_results/'
+json_output_url = "http://%s:8009/wps_results/" % (os.environ['SOLR_SERVER'],)
 
 # Fix for OpenStack internal/external ip:
 # (the internal ip is the environment variable OPENSTACK_INTERNAL_IP)
