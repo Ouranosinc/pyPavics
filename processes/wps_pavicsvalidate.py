@@ -50,7 +50,7 @@ class PavicsValidate(Process):
                                default='',
                                min_occurs=0,
                                mode=None),]
-        outputs = [LiteralOutput('validate_result',
+        outputs = [LiteralOutput('validation_result',
                                  'Validation result',
                                  data_type='string')]
 
