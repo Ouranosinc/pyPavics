@@ -5,7 +5,7 @@ import hashlib
 from pywps import Process,Format
 from pywps import LiteralInput,LiteralOutput
 
-import catalog
+from pavics import catalog
 
 # Example usage:
 #localhost/pywps?service=WPS&request=execute&version=1.0.0&\

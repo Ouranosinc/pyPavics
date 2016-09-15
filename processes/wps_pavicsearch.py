@@ -7,6 +7,8 @@ import urllib2
 from pywps import Process,Format,FORMATS
 from pywps import LiteralInput,LiteralOutput,ComplexOutput
 
+from pavics import catalog
+
 # Example usage:
 #
 # List facets values:

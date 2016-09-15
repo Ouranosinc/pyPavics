@@ -7,6 +7,8 @@ import urllib2
 from pywps import Process,Format
 from pywps import LiteralInput,LiteralOutput
 
+from pavics import catalog
+
 # Example usage:
 #localhost/pywps?service=WPS&request=execute&version=1.0.0&\
 #identifier=pavicsupdate&DataInputs=source=source_string;url=url_string;\
