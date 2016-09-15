@@ -66,6 +66,7 @@ class PavicsValidate(Process):
 
     def _handler(self,request,response):
         facets = request.inputs['facets'][0].data
+        facets = facets.split(',')
         paths = request.inputs['paths'][0].data
         if paths is not None:
             paths = paths.split(',')
