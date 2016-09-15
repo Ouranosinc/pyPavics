@@ -67,28 +67,8 @@ class PavicsUpdate(Process):
             # since the source and url already exist, it will update the other
             # fields.
             update_dict.update({kv[0]:kv[1]})
-        update_data = [update_dict]
-        solr_json_input = json.dumps(update_data)
 
-        # Send Solr update request
-        solr_method = 'update/json?commit=true'
-        url_request = urllib2.Request(url=solr_server+solr_method,
-                                      data=solr_json_input)
-        url_request.add_header('Content-type','application/json')
-        try:
-            url_response = urllib2.urlopen(url_request)
-        except urllib2.HTTPError as err:
-            if err.msg == 'Bad Request':
-                # One of the most likely reason for this is trying to add
-                # a field that is not part of the Solr Schema.
-                msg1 = 'Unknown field'
-                # Should this be a different output field?
-                response.outputs['update_result'].data = msg1
-                return response
-            else:
-                raise err
-        update_result = url_response.read()
-        url_response.close()
+        update_result = catalog.pavicsupdate(solr_server,update_dict)
 
         # Here we construct a unique filename
         md5_str = hashlib.md5(update_result+str(random.random())).hexdigest()

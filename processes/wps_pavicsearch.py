@@ -106,82 +106,38 @@ class PavicsSearch(Process):
             status_supported=True)
 
     def _handler(self,request,response):
-        my_search = ""
-        my_query = "&q="
         facets = request.inputs['facets'][0].data
-        if facets:
-            my_search += "&facet=true"
-            if facets != '*':
-                facets = facets.split(',')
-            else:
-                # how do we know what all the fields are?
-                # manual input for now...
-                # In ESGF this is is a config file for each node
-                # /esgf/config/facets.propertires
-                facets = ['author','category','cf_standard_name','experiment',
-                          'frequency','institute','model','project','source',
-                          'subject','title','units','variable',
-                          'variable_long_name']
-            for facet in facets:
-                my_search += "&facet.field=%s" % (facet,)
         limit = request.inputs['limit'][0].data
         if limit is None:
             limit = request.inputs['limit'][0].default
-        my_search += "&rows=%s" % (limit,)
         offset = request.inputs['offset'][0].data
         if offset is None:
             offset = request.inputs['offset'][0].default
-        my_search += "&start=%s" % (offset,)
         output_format = request.inputs['format'][0].data
         if output_format is None:
             output_format = request.inputs['format'][0].default
-        if output_format == 'application:solr/xml':
-            my_search += "&wt=xml"
-        elif output_format == 'application/solr+json':
-            my_search += "&wt=json"
-        else:
-            raise NotImplementedError()
         fields = request.inputs['fields'][0].data
-        if fields is not None:
-            my_search += "&fl=%s" % (fields,)
         constraints = request.inputs['constraints'][0].data
-        if constraints is not None:
-            constraints = constraints.split(',')
-            for constraint in constraints:
-                keyval = constraint.split(':')
-                # According to the ESGF API, if a key appears more than
-                # once, it is an OR statement, this should be added
-                # eventually. Similarly, there is support for not equal
-                # != ...
-                my_query += '+%s:%s' % (keyval[0],keyval[1])
         query = request.inputs['query'][0].data
-        if query is not None:
-            my_query += '+%s' % (query,)
-        my_search += "&indent=true"
-        if my_query != '&q=':
-            my_search += my_query
-        #my_search = 'q=aet&wt=json&indent=true'
-        my_search = my_search.lstrip('&')
-        #response.outputs['search_result'].data = solr_server+'select?'+my_search
-        #return response
-        url_request = urllib2.Request(url=solr_server+'select?'+my_search)
-        url_request.add_header('Content-type','application/json')
-        url_response = urllib2.urlopen(url_request)
-        search_result = url_response.read()
+
+        search_result = catalog.pavicsearch(solr_server,facets,limit,offset,
+                                            output_format,fields,constraints,
+                                            query)
+
         # Here we construct a unique filename
         md5_str = hashlib.md5(search_result+str(random.random())).hexdigest()
         time_str = time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
-        output_file_name = "json_result_%s_%s.json" % (time_str,md5_str[0:8])
-        f1 = open(os.path.join(json_output_path,output_file_name),'w')
-        f1.write(search_result)
-        f1.close()
+        output_file_name = "json_result_%s_%s." % (time_str,md5_str[0:8])
         if output_format == 'application/solr+json':
-            json_url = os.path.join(json_output_url,output_file_name)
-            response.outputs['search_result'].data = json_url
+            output_file_name += 'json'
         elif output_format == 'application/solr+xml':
-            # Output as xml...
-            raise NotImplementedError()
+            output_file_name += 'xml'
         else:
             # Unsupported format
             raise NotImplementedError()
+        f1 = open(os.path.join(json_output_path,output_file_name),'w')
+        f1.write(search_result)
+        f1.close()
+        result_url = os.path.join(json_output_url,output_file_name)
+        response.outputs['search_result'].data = result_url
         return response
