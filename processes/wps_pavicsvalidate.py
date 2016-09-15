@@ -75,6 +75,7 @@ class PavicsValidate(Process):
 
         validate_result = catalog.pavicsvalidate(solr_server,facets,
                                                  paths,files)
+        validate_result = json.dumps(validate_result)
 
         # Here we construct a unique filename
         md5_str = hashlib.md5(validate_result+str(random.random())).hexdigest()
@@ -82,7 +83,7 @@ class PavicsValidate(Process):
         output_file_name = "json_result_%s_%s.json" % (time_str,md5_str[0:8])
         
         f1 = open(os.path.join(json_output_path,output_file_name),'w')
-        f1.write(json.dumps(validate_result))
+        f1.write(validate_result)
         f1.close()
         result_url = os.path.join(json_output_url,output_file_name)
         response.outputs['validation_result'].data = result_url
