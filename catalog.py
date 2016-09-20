@@ -256,6 +256,7 @@ def pavicsvalidate(solr_server,required_facets,limit_paths=None,
             if missing_facets:
                 incomplete_docs.append({'source':doc['source'],
                                         'url':doc['url'],
+                                        'id':doc['id'],
                                         'opendap_url':doc['opendap_url'],
                                         'missing_facets':missing_facets})
         n += nrows
@@ -269,7 +270,7 @@ def pavicsupdate(solr_server,update_dict):
     solr_server : string
         usually of the form 'http://x.x.x.x:8983/solr/core_name/'
     update_dict : dictionary
-        key:value pairs to update
+        key:value pairs to update including the id key for reference
 
     Returns
     -------
@@ -278,10 +279,27 @@ def pavicsupdate(solr_server,update_dict):
 
     """
 
-    solr_json_input = json.dumps([update_dict])
+    # Get all the information of the current Solr document
+    my_search = "q=id:%s&wt=json" % (update_dict['id'])
+    url_request = urllib2.Request(url=solr_server+"select?%s" % (my_search,))
+    url_response = urllib2.urlopen(url_request)
+    search_result = url_response.read()
+    url_response.close()
+    search_dict = json.loads(search_result)
+    data = search_dict['response']['docs']
+    # Remove self-generated fields
+    dummy = data[0].pop('id')
+    dummy = data[0].pop('_version_')
+    dummy = data[0].pop('keywords')
+    dummy = data[0].pop('abstract',None)
+    for key in update_dict.keys():
+        if key == 'id':
+            continue
+        data[0][key] = update_dict[key]
+    
+    solr_json_input = json.dumps(data)
     # Send Solr update request
-    solr_method = 'update/json?commit=true'
-    url_request = urllib2.Request(url=solr_server+solr_method,
+    url_request = urllib2.Request(url=solr_server+'update/json?commit=true',
                                   data=solr_json_input)
     url_request.add_header('Content-type','application/json')
     try:

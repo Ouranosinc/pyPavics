@@ -30,11 +30,8 @@ class PavicsUpdate(Process):
     def __init__(self):
         # The combination of the 'source' and 'url' fields provide the 'id'
         # in the Solr database, they both must be provided.
-        inputs = [LiteralInput('source',
-                               'Source field of the dataset or file',
-                               data_type='string',),
-                  LiteralInput('url',
-                               'url field of the dataset or file',
+        inputs = [LiteralInput('id',
+                               'id field of the dataset or file',
                                data_type='string',),
                   LiteralInput('updates',
                                'Fields to update with their new values',
@@ -55,9 +52,8 @@ class PavicsUpdate(Process):
 
     def _handler(self,request,response):
         # Get the source and url to setup the update dictionary.
-        update_source = request.inputs['source'][0].data
-        update_url = request.inputs['url'][0].data
-        update_dict = {'source':update_source,'url':update_url}
+        update_id = request.inputs['id'][0].data
+        update_dict = {'id':update_id}
         # Get updates, which are the facets to add/modify.
         data_inputs = request.inputs['updates'][0].data
         # Split using comma & colon as separator
