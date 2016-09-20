@@ -71,38 +71,66 @@ def time_vectors_to_datetimes(time_vectors):
     """
 
     datetimes = []
+    ncdatetimes = []
+    irregular_calendar = False
     masked_datetimes = []
     valid_datetimes = []
     if len(time_vectors.shape) == 1:
-        full_vector = ma.masked_all([6],dtype='int32')
+        full_vector = ma.masked_all([7],dtype='int32')
         for s in range(time_vectors.shape[0]):
             full_vector[s] = time_vectors[s]
-        for s in range(time_vectors.shape[0],6):
+        for s in range(time_vectors.shape[0],7):
             if s in [1,2]:
                 full_vector[s] = 1
             else:
                 full_vector[s] = 0
         try:
-            datetimes.append(datetime.datetime(*full_vector))
-            valid_datetimes.append(0)
+            one_datetime = datetime.datetime(*full_vector)
         except:
-            masked_datetimes.append(0)
+            irregular_calendar = True
+        else:
+            datetimes.append(one_datetime)
+            valid_datetimes.append(0)
+        if irregular_calendar:
+            try:
+                ndatetime = netCDF4.netcdftime.datetime(*full_vector)
+                datetime_str = ndatetime.strftime()
+            except (ma.MaskError,ValueError):
+                masked_datetimes.append(0)
+            else:
+                ncdatetimes.append(ndatetime)
+                valid_datetimes.append(0)
     else:
         for i in range(time_vectors.shape[0]):
-            full_vector = ma.masked_all([6],dtype='int32')
+            full_vector = ma.masked_all([7],dtype='int32')
             for s in range(time_vectors.shape[1]):
                 full_vector[s] = time_vectors[i,s]
-            for s in range(time_vectors.shape[1],6):
+            for s in range(time_vectors.shape[1],7):
                 if s in [1,2]:
                     full_vector[s] = 1
                 else:
                     full_vector[s] = 0
             try:
-                datetimes.append(datetime.datetime(*full_vector))
-                valid_datetimes.append(i)
-            except:
+                ndatetime = netCDF4.netcdftime.datetime(*full_vector)
+                datetime_str = ndatetime.strftime()
+            except (ma.MaskError,ValueError):
                 masked_datetimes.append(i)
-    return datetimes,np.array(masked_datetimes),np.array(valid_datetimes)
+            else:
+                ncdatetimes.append(ndatetime)
+                valid_datetimes.append(i)
+            if not irregular_calendar:
+                try:
+                    one_datetime = datetime.datetime(*full_vector)
+                except ValueError:
+                    irregular_calendar = True
+                except ma.MaskError:
+                    pass
+                else:
+                    datetimes.append(one_datetime)
+    if irregular_calendar:
+        return ncdatetimes,np.array(masked_datetimes),np.array(valid_datetimes)
+    else:
+        return datetimes,np.array(masked_datetimes),np.array(valid_datetimes)
 
 def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],renames=None,
                   defaults=None,appends=None):
