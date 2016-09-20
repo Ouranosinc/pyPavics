@@ -19,18 +19,22 @@ class Period2Indices(Process):
         # From pywps4 code : time_format = '%Y-%m-%dT%H:%M:%S%z'
         # Is that a bug? %z should be %Z
         # Using 'string' data_type until this is corrected.
+        cal_abs = 'If left unspecified, taken from NetCDF file time variable.'
         inputs = [LiteralInput('initial_date',
                                'Initial date of the period',
-                               data_type='string'),
+                               data_type='string',
+                               abstract='Format must be %Y-%m-%dT%H:%M:%S'),
                   LiteralInput('final_date',
                                'Final date of the period',
-                               data_type='string'),
+                               data_type='string',
+                               abstract='Format must be %Y-%m-%dT%H:%M:%S'),
                   LiteralInput('opendap_url',
                                'OPeNDAP url to a NetCDF file',
                                data_type='string'),
                   LiteralInput('calendar',
                                'NetCDF calendar type',
                                data_type='string',
+                               abstract=cal_abs,
                                default='gregorian',
                                min_occurs=0),]
         title_ini = 'Initial time index of the period in the NetCDF file'
@@ -38,12 +42,14 @@ class Period2Indices(Process):
         outputs = [LiteralOutput('initial_index',title_ini,
                                  data_type='integer'),
                    LiteralOutput('final_index',title_fin,
-                                 data_type='integer'),]
+                                 data_type='integer',
+                                 abstract='The final index is inclusive.'),]
 
         super(Period2Indices,self).__init__(
             self._handler,
             identifier='period2indices',
             title='NetCDF time indices from a period',
+            abstract='The final index is inclusive.'
             version='0.1',
             inputs=inputs,
             outputs=outputs,

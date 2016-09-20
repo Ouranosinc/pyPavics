@@ -682,24 +682,44 @@ def period2indices(initial_date,final_date,nc_file,calendar=None):
 
     initial_time = time.strptime(initial_date,'%Y-%m-%dT%H:%M:%S')
     final_time = time.strptime(final_date,'%Y-%m-%dT%H:%M:%S')
-    # We should be using netCDF4.netcdftime.datetime to support
-    # unconventional dates.
-    initial_nctime = datetime.datetime(initial_time.tm_year,
-                                                 initial_time.tm_mon,
-                                                 initial_time.tm_mday,
-                                                 initial_time.tm_hour,
-                                                 initial_time.tm_min,
-                                                 initial_time.tm_sec)
-    final_nctime = datetime.datetime(final_time.tm_year,
-                                               final_time.tm_mon,
-                                               final_time.tm_mday,
-                                               final_time.tm_hour,
-                                               final_time.tm_min,
-                                               final_time.tm_sec)
+
     nc = netCDF4.Dataset(nc_file,'r')
     if not nc.variables.has_key('time'):
         raise NetCDFError("No time variable in the NetCDF file.")
     nctime = nc.variables['time']
+    if calendar is None:
+        if hasattr(nctime,'calendar'):
+            calendar = nctime.calendar
+        else:
+            calendar = 'gregorian'
+    if calendar in ['gregorian','standard']:
+        # The gregorian calendar requires datetime.datetime inputs.
+        initial_nctime = datetime.datetime(initial_time.tm_year,
+                                           initial_time.tm_mon,
+                                           initial_time.tm_mday,
+                                           initial_time.tm_hour,
+                                           initial_time.tm_min,
+                                           initial_time.tm_sec)
+        final_nctime = datetime.datetime(final_time.tm_year,
+                                         final_time.tm_mon,
+                                         final_time.tm_mday,
+                                         final_time.tm_hour,
+                                         final_time.tm_min,
+                                         final_time.tm_sec)
+    else:
+        # For the other calendars, we can use the netcdftime.datetime.
+        initial_nctime = netCDF4.netcdftime.datetime(initial_time.tm_year,
+                                                     initial_time.tm_mon,
+                                                     initial_time.tm_mday,
+                                                     initial_time.tm_hour,
+                                                     initial_time.tm_min,
+                                                     initial_time.tm_sec)
+        final_nctime = netCDF4.netcdftime.datetime(final_time.tm_year,
+                                                   final_time.tm_mon,
+                                                   final_time.tm_mday,
+                                                   final_time.tm_hour,
+                                                   final_time.tm_min,
+                                                   final_time.tm_sec)
     index_ini = netCDF4.date2index(initial_nctime,nctime,calendar=calendar,
                                    select='after')
     index_fin = netCDF4.date2index(final_nctime,nctime,calendar=calendar,
