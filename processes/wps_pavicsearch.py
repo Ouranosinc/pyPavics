@@ -1,10 +1,8 @@
 import os
 import time
-import random
-import hashlib
 import json
 import urllib2
-from pywps import Process,get_format
+from pywps import Process,get_format,configuration
 from pywps import LiteralInput,LiteralOutput,ComplexOutput
 
 from pavics import catalog
@@ -22,14 +20,10 @@ from pavics import catalog
 # base_search_URL in the ESGF Search API is now a solr database URL,
 # this is provided as the environment variable SOLR_SERVER.
 solr_server = "http://%s:8983/solr/birdhouse/" % (os.environ['SOLR_SERVER'],)
-# The place where we save the resulting json files should also be in
-# a config file, the user under which apache is running must be able
-# to write to that directory.
-json_output_path = '/var/www/html/wps_results'
-json_output_url = "http://%s:8009/wps_results/" % (os.environ['SOLR_SERVER'],)
+# The user under which apache is running must be able to write to that
+# directory.
+json_output_path = configuration.get_config_value('server','outputpath')
 
-#json_format = Format('application/json')
-#gmlxml_format = Format('application/gml+xml')
 json_format = get_format('JSON')
 gmlxml_format = get_format('GML')
 
@@ -134,10 +128,8 @@ class PavicsSearch(Process):
                                             query)
 
         # Here we construct a unique filename
-        #md5_str = hashlib.md5(search_result+str(random.random())).hexdigest()
         time_str = time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
-        #output_file_name = "json_result_%s_%s." % (time_str,md5_str[0:8])
-        output_file_name = "json_result_%s_." % (time_str,)
+        output_file_name = "solr_result_%s_." % (time_str,)
         if output_format == 'application/solr+json':
             output_file_name += 'json'
         elif output_format == 'application/solr+xml':
@@ -149,8 +141,6 @@ class PavicsSearch(Process):
         f1 = open(output_file,'w')
         f1.write(search_result)
         f1.close()
-        #result_url = os.path.join(json_output_url,output_file_name)
-        #response.outputs['search_result'].data = result_url
         response.outputs['search_result'].file = output_file
         if output_format == 'application/solr+json':
             response.outputs['search_result'].output_format = json_format
