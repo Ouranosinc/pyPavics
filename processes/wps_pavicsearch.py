@@ -4,7 +4,7 @@ import random
 import hashlib
 import json
 import urllib2
-from pywps import Process,Format,FORMATS
+from pywps import Process,get_format
 from pywps import LiteralInput,LiteralOutput,ComplexOutput
 
 from pavics import catalog
@@ -28,8 +28,10 @@ solr_server = "http://%s:8983/solr/birdhouse/" % (os.environ['SOLR_SERVER'],)
 json_output_path = '/var/www/html/wps_results'
 json_output_url = "http://%s:8009/wps_results/" % (os.environ['SOLR_SERVER'],)
 
-json_format = Format('application/json')
-gmlxml_format = Format('application/gml+xml')
+#json_format = Format('application/json')
+#gmlxml_format = Format('application/gml+xml')
+json_format = get_format('JSON')
+gmlxml_format = get_format('GML')
 
 class PavicsSearch(Process):
     def __init__(self):
@@ -93,11 +95,11 @@ class PavicsSearch(Process):
                                default='',
                                min_occurs=0,
                                mode=None),]
-        fjson = {"mimeType":"application/json"}
-        fxml = {"mimeType":"application/xml"}
+
         outputs = [ComplexOutput('search_result',
                                  'PAVICS Catalogue Search Result',
-                                 supported_formats=[fjson,fxml])]
+                                 supported_formats=[json_format,
+                                                    gmlxml_format])]
 
         super(PavicsSearch,self).__init__(
             self._handler,
@@ -145,5 +147,5 @@ class PavicsSearch(Process):
         result_url = os.path.join(json_output_url,output_file_name)
         response.outputs['search_result'].data = result_url
         if output_format == 'application/solr+xml':
-            response.outputs['search_result'].data_format = fxml
+            response.outputs['search_result'].data_format = gmlxml_format
         return response
