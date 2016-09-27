@@ -54,7 +54,7 @@ class PavicsSearch(Process):
                   LiteralInput('limit',
                                'Pagination limit',
                                data_type='integer',
-                               default=0,
+                               default=10,
                                min_occurs=0,
                                mode=None),
                   LiteralInput('fields',
@@ -93,9 +93,11 @@ class PavicsSearch(Process):
                                default='',
                                min_occurs=0,
                                mode=None),]
-        outputs = [LiteralOutput('search_result',
+        fjson = {"mimeType":"application/json"}
+        fxml = {"mimeType":"application/xml"}
+        outputs = [ComplexOutput('search_result',
                                  'PAVICS Catalogue Search Result',
-                                 data_type='string')]
+                                 supported_formats=[fjson,fxml])]
 
         super(PavicsSearch,self).__init__(
             self._handler,
@@ -142,4 +144,6 @@ class PavicsSearch(Process):
         f1.close()
         result_url = os.path.join(json_output_url,output_file_name)
         response.outputs['search_result'].data = result_url
+        if output_format == 'application/solr+xml':
+            response.outputs['search_result'].data_format = fxml
         return response
