@@ -56,7 +56,7 @@ class PavicsSearch(Process):
                   LiteralInput('limit',
                                'Pagination limit',
                                data_type='integer',
-                               default=10,
+                               default=0, # Unable to set to 10, pywps bug.
                                min_occurs=0,
                                mode=None),
                   LiteralInput('fields',
@@ -115,7 +115,9 @@ class PavicsSearch(Process):
         facets = request.inputs['facets'][0].data
         limit = request.inputs['limit'][0].data
         if limit is None:
-            limit = request.inputs['limit'][0].default
+            # Bypass pywps bug where we are unable to set default limit
+            limit = 10
+            #limit = request.inputs['limit'][0].default
         offset = request.inputs['offset'][0].data
         if offset is None:
             offset = request.inputs['offset'][0].default
