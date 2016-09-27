@@ -144,11 +144,13 @@ class PavicsSearch(Process):
         else:
             # Unsupported format
             raise NotImplementedError()
-        f1 = open(os.path.join(json_output_path,output_file_name),'w')
+        output_file = os.path.join(json_output_path,output_file_name)
+        f1 = open(output_file,'w')
         f1.write(search_result)
         f1.close()
-        result_url = os.path.join(json_output_url,output_file_name)
-        response.outputs['search_result'].data = result_url
+        #result_url = os.path.join(json_output_url,output_file_name)
+        #response.outputs['search_result'].data = result_url
+        response.outputs['search_result'].file = output_file
         if output_format == 'application/solr+json':
             response.outputs['search_result'].output_format = json_format
         elif output_format == 'application/solr+xml':
