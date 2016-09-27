@@ -100,6 +100,7 @@ class PavicsSearch(Process):
                                  'PAVICS Catalogue Search Result',
                                  supported_formats=[json_format,
                                                     gmlxml_format])]
+        outputs[0].as_reference=True
 
         super(PavicsSearch,self).__init__(
             self._handler,
