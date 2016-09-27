@@ -149,6 +149,8 @@ class PavicsSearch(Process):
         f1.close()
         result_url = os.path.join(json_output_url,output_file_name)
         response.outputs['search_result'].data = result_url
-        if output_format == 'application/solr+xml':
-            response.outputs['search_result'].data_format = gmlxml_format
+        if output_format == 'application/solr+json':
+            response.outputs['search_result'].output_format = json_format
+        elif output_format == 'application/solr+xml':
+            response.outputs['search_result'].output_format = gmlxml_format
         return response
