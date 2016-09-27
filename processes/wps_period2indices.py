@@ -49,7 +49,7 @@ class Period2Indices(Process):
             self._handler,
             identifier='period2indices',
             title='NetCDF time indices from a period',
-            abstract='The final index is inclusive.'
+            abstract='The final index is inclusive.',
             version='0.1',
             inputs=inputs,
             outputs=outputs,
