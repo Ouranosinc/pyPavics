@@ -134,9 +134,10 @@ class PavicsSearch(Process):
                                             query)
 
         # Here we construct a unique filename
-        md5_str = hashlib.md5(search_result+str(random.random())).hexdigest()
+        #md5_str = hashlib.md5(search_result+str(random.random())).hexdigest()
         time_str = time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
-        output_file_name = "json_result_%s_%s." % (time_str,md5_str[0:8])
+        #output_file_name = "json_result_%s_%s." % (time_str,md5_str[0:8])
+        output_file_name = "json_result_%s_." % (time_str,)
         if output_format == 'application/solr+json':
             output_file_name += 'json'
         elif output_format == 'application/solr+xml':
