@@ -80,7 +80,7 @@ class NCPlotly(Process):
             status_supported=True)
 
     def _handler(self,request,response):
-        d = ncplotly.ncplotly_from_slice.netcdfslice(
+        d = ncplotly.ncplotly_from_slice(
                 request.inputs['opendap_url'][0].data,
                 request.inputs['variable_name'][0].data,
                 request.inputs['time_initial_indice'][0].data,
