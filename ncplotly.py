@@ -52,7 +52,7 @@ def ncplotly_from_slice(nc_file,var_name,ti=None,tf=None,levi=None,levf=None,
     # here we assume that it is safe to fallen the resulting slice
     # i.e. that the user made sure the slice result is 1 dimensional in time
     d = {'data':[{'x':datestrings,
-                  'y':list(ncvar[slices].flatten()),
+                  'y':map(float,list(ncvar[slices].flatten())),
                   'type':'scatter'}],
          'layout':{'title':nc_file,
                    'yaxis':{'title':var_name+' ('+ncvar.units+')'}}}
