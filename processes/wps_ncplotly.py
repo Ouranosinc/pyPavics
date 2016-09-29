@@ -95,7 +95,7 @@ class NCPlotly(Process):
 
         # Here we construct a unique filename
         time_str = time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
-        output_file_name = "plotly_result_%s_." % (time_str,)
+        output_file_name = "plotly_result_%s_.json" % (time_str,)
         output_file = os.path.join(json_output_path,output_file_name)
         f1 = open(output_file,'w')
         f1.write(plotly_result)
