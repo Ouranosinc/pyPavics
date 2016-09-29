@@ -1,5 +1,5 @@
 import time
-from pywps import Process,Format,FORMATS
+from pywps import Process
 from pywps import LiteralInput,LiteralOutput,ComplexOutput
 
 import netCDF4
