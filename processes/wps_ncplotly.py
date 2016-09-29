@@ -1,8 +1,8 @@
+import os
 import time
+import json
 from pywps import Process,get_format,configuration
 from pywps import LiteralInput,LiteralOutput,ComplexOutput
-
-import netCDF4
 
 from pavics import ncplotly
 
