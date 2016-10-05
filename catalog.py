@@ -260,7 +260,7 @@ def pavicsvalidate(solr_server,required_facets,limit_paths=None,
                                         'opendap_url':doc['opendap_url'],
                                         'missing_facets':missing_facets})
         n += nrows
-        return incomplete_docs
+    return incomplete_docs
 
 def pavicsupdate(solr_server,update_dict):
     """Update Solr database.
