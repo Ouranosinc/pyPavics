@@ -19,17 +19,52 @@ import urllib2
 import threddsclient
 import netCDF4
 
-def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
-                ignored_variables=None,
-                internal_ip=None,external_ip=None,output_internal_ip=False):
-    """Crawl thredds server and output to Solr database.
+def solr_update(solr_server,update_data):
+    """Update data in a Solr database.
+
+    Parameters
+    ----------
+    solr_server : string
+        usually of the form 'http://x.x.x.x:8983/solr/core_name/'
+    update_data : list of dict
+
+    Returns
+    -------
+    out : string
+        json response from the Solr server
+
+    """
+
+    solr_json_input = json.dumps(update_data)
+    # Send Solr update request
+    solr_method = 'update/json?commit=true'
+    url_request = urllib2.Request(url=solr_server+solr_method,
+                                  data=solr_json_input)
+    url_request.add_header('Content-type','application/json')
+    try:
+        url_response = urllib2.urlopen(url_request)
+    except urllib2.HTTPError as err:
+        if err.msg == 'Bad Request':
+            # One of the most likely reason for this is trying to add
+            # a field that is not part of the Solr Schema.
+            return 'Unknown field'
+        else:
+            raise err
+    update_result = url_response.read()
+    url_response.close()
+
+    return update_result
+
+def thredds_crawler(thredds_server,index_facets,depth=50,
+                    ignored_variables=None,
+                    internal_ip=None,external_ip=None,
+                    output_internal_ip=False):
+    """Crawl thredds server for metadata.
 
     Parameters
     ----------
     thredds_server : string
         usually of the form 'http://x.x.x.x:8083/thredds'
-    solr_server : string
-        usually of the form 'http://x.x.x.x:8983/solr/core_name/'
     index_facets : list of string
         global attributes from the NetCDF file that will be used as facets
     depth : int
@@ -45,15 +80,12 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
 
     Returns
     -------
-    out : string
-        json response from the Solr server
+    out : list of dict
 
     Notes
     -----
-    1. Currently, the index facets must be part of the default Birdhouse
-       Solr Schema.
-    2. Variables that do not have any of 'standard_name', 'long_name' or
-       'units' attributes are ignored. If only one or two of those are
+    1. Variables that do not have any of 'standard_name', 'long_name' or
+       'units' attributes are ignoreds. If only one or two of those are
        missing, they are set to '_undefined' in the database.
 
     """
@@ -140,30 +172,59 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
                     doc['units'].append('_undefined')
         nc.close()
         add_data.append(doc)
-    solr_json_input = json.dumps(add_data)
+    return add_data
 
-    # Send Solr update request
-    solr_method = 'update/json?commit=true'
-    url_request = urllib2.Request(url=solr_server+solr_method,
-                                  data=solr_json_input)
-    url_request.add_header('Content-type','application/json')
-    try:
-        url_response = urllib2.urlopen(url_request)
-    except urllib2.HTTPError as err:
-        if err.msg == 'Bad Request':
-            # One of the most likely reason for this is trying to add
-            # a field that is not part of the Solr Schema.
-            return 'Unknown field'
-        else:
-            raise err
-    update_result = url_response.read()
-    url_response.close()
+def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
+                ignored_variables=None,
+                internal_ip=None,external_ip=None,output_internal_ip=False):
+    """Crawl thredds server and output to Solr database.
 
-    return update_result
+    Parameters
+    ----------
+    thredds_server : string
+        usually of the form 'http://x.x.x.x:8083/thredds'
+    solr_server : string
+        usually of the form 'http://x.x.x.x:8983/solr/core_name/'
+    index_facets : list of string
+        global attributes from the NetCDF file that will be used as facets
+    depth : int
+        thredds parameter for depth of subdirectories to search
+    ignored_variables : list of string
+        variables that will be considered metadata and not added to the
+        list of variables in the NetCDF file. Can be set to 'all' to
+        ignore everything (only global attributes will be added to the
+        database)        
+    internal_ip : string
+    external_ip : string
+    output_internal_ip : bool
+
+    Returns
+    -------
+    out : string
+        json response from the Solr server
+
+    Notes
+    -----
+    1. Each NetCDF file served bu the thredds server is scanned to extract
+       metadata (CF standard vocabulary). This metadata is then added
+       to the Solr database so it can index the file by its properties.
+    2. Currently, the index facets must be part of the default Birdhouse
+       Solr Schema.
+    3. Variables that do not have any of 'standard_name', 'long_name' or
+       'units' attributes are ignoreds. If only one or two of those are
+       missing, they are set to '_undefined' in the database.
+
+    """
+
+    add_data = thredds_crawler(thredds_server,index_facets,depth=50,
+                               ignored_variables=ignored_variables,
+                               internal_ip=internal_ip,external_ip=external_ip,
+                               output_internal_ip=output_internal_ip)
+    return solr_update(solr_server,add_data)
 
 def pavicsvalidate(solr_server,required_facets,limit_paths=None,
                    limit_files=None):
-    """Validate Solr database for required facets.
+    """Query Solr database for entries with missing required facets.
 
     Parameters
     ----------
@@ -220,7 +281,6 @@ def pavicsvalidate(solr_server,required_facets,limit_paths=None,
             warp = (str(n),str(n+nrows))
             my_search = 'q=*:*&start=%s&rows=%s&wt=json' % warp
         my_url = solr_server+"select?%s" % (my_search,)
-        print my_url
         url_request = urllib2.Request(url=my_url)
         url_response = urllib2.urlopen(url_request)
         search_result = url_response.read()
@@ -229,10 +289,7 @@ def pavicsvalidate(solr_server,required_facets,limit_paths=None,
         if not len(search_dict['response']['docs']):
             break
         for doc in search_dict['response']['docs']:
-            c1 = not doc.has_key('source') 
-            c2 = not doc.has_key('url')
-            c3 = not doc.has_key('opendap_url')
-            if c1 or c2 or c3:
+            if (not doc.has_key('source')) or (not doc.has_key('url')):
                 continue
             missing_facets = []
             for required_facet in required_facets:
@@ -257,13 +314,12 @@ def pavicsvalidate(solr_server,required_facets,limit_paths=None,
                 incomplete_docs.append({'source':doc['source'],
                                         'url':doc['url'],
                                         'id':doc['id'],
-                                        'opendap_url':doc['opendap_url'],
                                         'missing_facets':missing_facets})
         n += nrows
     return incomplete_docs
 
 def pavicsupdate(solr_server,update_dict):
-    """Update Solr database.
+    """Update a Solr entry identified by its id using (key,value) pairs.
 
     Parameters
     ----------
@@ -277,6 +333,10 @@ def pavicsupdate(solr_server,update_dict):
     out : string
         json response from the Solr server
 
+    Notes
+    -----
+    1. The current implementation only updates one entry at a time.
+
     """
 
     # Get all the information of the current Solr document
@@ -288,32 +348,13 @@ def pavicsupdate(solr_server,update_dict):
     search_dict = json.loads(search_result)
     data = search_dict['response']['docs']
     # Remove self-generated fields
-    dummy = data[0].pop('id')
-    dummy = data[0].pop('_version_')
-    dummy = data[0].pop('keywords')
-    dummy = data[0].pop('abstract',None)
-    for key in update_dict.keys():
+    for key in ['id','_version_','keywords','abstract']:
+        data[0].pop(key,None)
+    for key,value in update_dict.items():
         if key == 'id':
             continue
-        data[0][key] = update_dict[key]
-    
-    solr_json_input = json.dumps(data)
-    # Send Solr update request
-    url_request = urllib2.Request(url=solr_server+'update/json?commit=true',
-                                  data=solr_json_input)
-    url_request.add_header('Content-type','application/json')
-    try:
-        url_response = urllib2.urlopen(url_request)
-    except urllib2.HTTPError as err:
-        if err.msg == 'Bad Request':
-            # One of the most likely reason for this is trying to add
-            # a field that is not part of the Solr Schema.
-            return 'Unknown field'
-        else:
-            raise err
-    update_result = url_response.read()
-    url_response.close()
-    return update_result
+        data[0][key] = value
+    return solr_update(data)
 
 def pavicsearch(solr_server,facets=None,limit=10,offset=0,
                 output_format='application/solr+json',fields=None,
@@ -325,9 +366,12 @@ def pavicsearch(solr_server,facets=None,limit=10,offset=0,
     solr_server : string
         usually of the form 'http://x.x.x.x:8983/solr/core_name/'
     facets : string
-        comma separated list of facets
+        comma separated list of facets; facets are searchable indexing
+        terms in the Solr database
     limit : int
+        maximum number of documents to return
     offset : int
+        where to start in the document count of the Solr search
     output_format : string
         one of 'application/solr+json' or 'application:solr+xml'
     fields : string
