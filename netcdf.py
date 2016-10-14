@@ -42,6 +42,10 @@ def datetimes_to_time_vectors(datetimes):
     out - numpy array
         Nx6 matrix of time vectors
 
+    Notes
+    -----
+    1. Does not support microsecond (datetime shape of length 7)
+
     """
 
     def datetime_timetuple(one_datetime):
@@ -330,7 +334,12 @@ def nc_copy_variables_structure(nc_source,nc_destination,includes=[],
                     if source_size != dest_size:
                         break
                 else:
-                    create_args[var_src]['chunksizes'] = ncvar1.chunking()
+                    if ncvar1.chunking() == 'contiguous':
+                        # This does not seem to work, why?
+                        #create_args[var_src]['contiguous'] = True
+                        pass
+                    else:
+                        create_args[var_src]['chunksizes'] = ncvar1.chunking()
             nc_destination.createVariable(renames[var_src],new_dtype[var_src],
                                           new_dimensions[var_src],
                                           **create_args[var_src])
