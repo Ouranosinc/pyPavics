@@ -11,6 +11,9 @@ Functions:
 
  * :func:`datetimes_to_time_vectors` - convert list of datetimes to Nx6 matrix.
  * :func:`time_vectors_to_datetimes` - convert time vectors to datetimes.
+ * :func:`validate_calendar` - Valide calendar string.
+ * :func:`_calendar_from_ncdataset` - Get calendar from NetCDF Dataset.
+ * :func:`get_calendar` - Get calendar from a NetCDF resource.
  * :func:`nc_copy_attrs` - copy multiple global attributes.
  * :func:`nc_copy_dimensions` - copy dimensions.
  * :func:`nc_copy_variables_structure` - copy variables structure.
@@ -131,6 +134,97 @@ def time_vectors_to_datetimes(time_vectors):
         return ncdatetimes,np.array(masked_datetimes),np.array(valid_datetimes)
     else:
         return datetimes,np.array(masked_datetimes),np.array(valid_datetimes)
+
+def validate_calendar(calendar):
+    """Validate calendar string for CF Conventions.
+
+    Parameters
+    ----------
+    calendar : str
+
+    Returns
+    -------
+    out : str
+        same as input if the calendar is valid
+
+    Notes
+    -----
+    1. The 'none' value for the calendar attribute is not supported anywhere
+       in this code presently, so NotImplementedError is raised.
+    2. NetCDFError is raised for invalid calendars.
+
+    """
+
+    if calendar in ['gregorian','standard','proleptic_gregorian','noleap',
+                    '365_day','all_leap','366_day','360_day','julian']:
+        return calendar
+    elif calendar == 'none':
+        raise NotImplementedError("calendar is set to 'none'")
+    else:
+        raise NetCDFError("Unknown calendar: %s" % (nc_source.calendar,))
+
+def _calendar_from_ncdataset(ncdataset):
+    """Get calendar from a netCDF4._netCDF4.Dataset object.
+
+    Parameters
+    ----------
+    ncdataset : netCDF4._netCDF4.Dataset
+
+    Returns
+    -------
+    out : str
+        calendar attribute of the time variable
+
+    Notes
+    -----
+    1. The 'none' value for the calendar attribute is not supported anywhere
+       in this code presently, so NotImplementedError is raised.
+    2. NetCDFError is raised for invalid calendars or if there is not time
+       variable in the dataset.
+
+    """
+
+    if ncdataset.variables.has_key('time'):
+        if hasattr(ncdataset.variables['time'],'calendar'):
+            return validate_calendar(ncdataset.variables['time'].calendar)
+        else:
+            return 'gregorian'
+    else:
+        raise NetCDFError("NetCDF file has no time variable")
+
+def get_calendar(nc_resource):
+    """Get calendar from a NetCDF resource.
+
+    Parameters
+    ----------
+    nc_resource : str or netCDF4._netCDF4.Dataset or netCDF4._netCDF4.Variable
+
+    Returns
+    -------
+    out : str
+        calendar attribute of the time variable
+
+    Notes
+    -----
+    1. The 'none' value for the calendar attribute is not supported anywhere
+       in this code presently, so NotImplementedError is raised.
+    2. NetCDFError is raised for invalid calendars or if there is not time
+       variable in the dataset.
+
+    """
+
+    if hasattr(nc_resource,'calendar'):
+        return validate_calendar(nc_resource.calendar)
+    elif hasattr(nc_resource,'variables') and \
+         hasattr(nc_resource.variables,'has_key'):
+        return _calendar_from_ncdataset(nc_resource)
+    else:
+        try:
+            nc = netCDF4.Dataset(nc_resource,'r')
+        except:
+            raise NetCDFError(("Unknown NetCDF "
+                               "resource: %s") % (str(nc_resource),))
+        return _calendar_from_ncdataset(nc)
 
 def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],renames=None,
                   defaults=None,appends=None):
