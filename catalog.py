@@ -56,7 +56,7 @@ def solr_update(solr_server,update_data):
     return update_result
 
 def thredds_crawler(thredds_server,index_facets,depth=50,
-                    ignored_variables=None,
+                    ignored_variables=None,set_dataset_id=False,
                     internal_ip=None,external_ip=None,
                     output_internal_ip=False):
     """Crawl thredds server for metadata.
@@ -73,7 +73,10 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
         variables that will be considered metadata and not added to the
         list of variables in the NetCDF file. Can be set to 'all' to
         ignore everything (only global attributes will be added to the
-        database)        
+        database)
+    set_dataset_id : bool
+        if true, the files that are in a common directory will have
+        their dataset_id set to reflect that unique relative directory
     internal_ip : string
     external_ip : string
     output_internal_ip : bool
@@ -85,7 +88,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
     Notes
     -----
     1. Variables that do not have any of 'standard_name', 'long_name' or
-       'units' attributes are ignoreds. If only one or two of those are
+       'units' attributes are ignored. If only one or two of those are
        missing, they are set to '_undefined' in the database.
 
     """
@@ -134,6 +137,11 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
                'wms_url':urls['wms_url'],
                'resourcename':thredds_dataset.url_path,
                'subject':'Birdhouse Thredds Catalog'}
+        # Set default dataset_id
+        if set_dataset_id:
+            ci = urls['catalog_url'].find('/catalog.xml')
+            did = '.'.join(urls['catalog_url'][:ci].split('/')[6:])
+            doc['dataset_id'] = did
         # Add custom facets
         for facet in index_facets:
             if hasattr(nc,facet):
@@ -175,7 +183,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
     return add_data
 
 def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
-                ignored_variables=None,
+                ignored_variables=None,set_dataset_id=False,
                 internal_ip=None,external_ip=None,output_internal_ip=False):
     """Crawl thredds server and output to Solr database.
 
@@ -193,7 +201,10 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
         variables that will be considered metadata and not added to the
         list of variables in the NetCDF file. Can be set to 'all' to
         ignore everything (only global attributes will be added to the
-        database)        
+        database)
+    set_dataset_id : bool
+        if true, the files that are in a common directory will have
+        their dataset_id set to reflect that unique relative directory
     internal_ip : string
     external_ip : string
     output_internal_ip : bool
@@ -218,6 +229,7 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
 
     add_data = thredds_crawler(thredds_server,index_facets,depth=50,
                                ignored_variables=ignored_variables,
+                               set_dataset_id=set_dataset_id,
                                internal_ip=internal_ip,external_ip=external_ip,
                                output_internal_ip=output_internal_ip)
     return solr_update(solr_server,add_data)
@@ -356,9 +368,70 @@ def pavicsupdate(solr_server,update_dict):
         data[0][key] = value
     return solr_update(data)
 
+def datasets_from_solr_search(solr_search_result):
+    """Convert a Solr search result on files to a dataset search result.
+
+    Parameters
+    ----------
+    solr_search_result : string
+        the json text result from a Solr query
+
+    Returns
+    -------
+    out : string
+        restructured json response for dataset representation
+
+    """
+
+    search_results = json.loads(solr_search_result)
+    known_datasets = []
+    first_instances = []
+    for i,doc in enumerate(search_results['response']['docs']):
+        if doc['dataset_id'] in known_datasets:
+            refi = first_instances[known_datasets.index(doc['dataset_id'])]
+            ref_doc = search_results['response']['docs'][refi]
+            ref_doc['catalog_urls'].append(doc['catalog_url'])
+            ref_doc['opendap_urls'].append(doc['opendap_url'])
+            ref_doc['urls'].append(doc['url'])
+            ref_doc['wms_urls'].append(doc['wms_url'])
+            for key in ['variable','variable_long_name','units',
+                        'cf_standard_name']:
+                for var_name in doc[key]:
+                    if var_name not in ref_doc[key]:
+                        ref_doc[key].append(var_name)
+            for var_name in doc['cf_standard_name']:
+                if var_name not in ref_doc['keywords']:
+                    ref_doc['keywords'].append(var_name)
+        else:
+            known_datasets.append(doc['dataset_id'])
+            first_instances.append(i)
+            doc['catalog_urls'] = [doc['catalog_url']]
+            doc['opendap_urls'] = [doc['opendap_url']]
+            doc['urls'] = [doc['url']]
+            doc['wms_urls'] = [doc['wms_url']]
+            doc.pop('abstract',None)
+            doc.pop('catalog_url',None)
+            doc.pop('id',None)
+            doc.pop('last_modified',None)
+            doc.pop('opendap_url',None)
+            doc.pop('resourcename',None)
+            doc.pop('title',None)
+            doc.pop('url',None)
+            doc.pop('wms_url',None)
+    for i in range(len(search_results['response']['docs'])-1,-1,-1):
+        if i not in first_instances:
+            search_results['response']['docs'].pop(i)
+    for doc in search_results['response']['docs']:
+        doc['opendap_urls'].sort()
+        doc['urls'].sort()
+        doc['wms_urls'].sort()
+    n = len(search_results['response']['docs'])
+    search_results['response']['numFound'] = n
+    return json.dumps(search_results)
+
 def pavicsearch(solr_server,facets=None,limit=10,offset=0,
-                output_format='application/solr+json',fields=None,
-                constraints=None,query=None,):
+                search_type='Dataset',output_format='application/solr+json',
+                fields=None,constraints=None,query=None,):
     """Search Solr database.
 
     Parameters
@@ -372,6 +445,8 @@ def pavicsearch(solr_server,facets=None,limit=10,offset=0,
         maximum number of documents to return
     offset : int
         where to start in the document count of the Solr search
+    search_type : string
+        one of 'Dataset' or 'File'
     output_format : string
         one of 'application/solr+json' or 'application:solr+xml'
     fields : string
@@ -436,4 +511,8 @@ def pavicsearch(solr_server,facets=None,limit=10,offset=0,
     url_response = urllib2.urlopen(url_request)
     search_result = url_response.read()
     url_response.close()
+    if search_type == 'Dataset':
+        if output_format == 'application:solr+xml':
+            raise NotImplementedError()
+        search_result = datasets_from_solr_search(search_result)
     return search_result

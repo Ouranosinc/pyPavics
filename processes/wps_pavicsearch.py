@@ -116,6 +116,9 @@ class PavicsSearch(Process):
         offset = request.inputs['offset'][0].data
         if offset is None:
             offset = request.inputs['offset'][0].default
+        search_type = request.inputs['type'][0].data
+        if search_type is None:
+            search_type = request.inputs['type'][0].default
         output_format = request.inputs['format'][0].data
         if output_format is None:
             output_format = request.inputs['format'][0].default
@@ -124,8 +127,8 @@ class PavicsSearch(Process):
         query = request.inputs['query'][0].data
 
         search_result = catalog.pavicsearch(solr_server,facets,limit,offset,
-                                            output_format,fields,constraints,
-                                            query)
+                                            search_type,output_format,fields,
+                                            constraints,query)
 
         # Here we construct a unique filename
         time_str = time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
