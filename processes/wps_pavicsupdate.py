@@ -31,7 +31,12 @@ class PavicsUpdate(Process):
         # in the Solr database, they both must be provided.
         inputs = [LiteralInput('id',
                                'id field of the dataset or file',
-                               data_type='string',),
+                               data_type='string'),
+                  LiteralInput('type',
+                               'Dataset or File'
+                               data_type='string',
+                               default='File',
+                               min_occurs=0),
                   LiteralInput('updates',
                                'Fields to update with their new values',
                                data_type='string'),]
@@ -53,7 +58,15 @@ class PavicsUpdate(Process):
     def _handler(self,request,response):
         # Get the source and url to setup the update dictionary.
         update_id = request.inputs['id'][0].data
-        update_dict = {'id':update_id}
+        update_type = request.inputs['type'][0].data
+        if update_type is None:
+            update_type = request.inputs['type'][0].default
+        if update_type == 'File':
+            update_dict = {'id':update_id}
+        elif update_type == 'Dataset':
+            update_dict = {'dataset_id':update_id}
+        else:
+            raise NotImplementedError()
         # Get updates, which are the facets to add/modify.
         data_inputs = request.inputs['updates'][0].data
         # Split using comma & colon as separator
