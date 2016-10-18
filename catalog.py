@@ -338,7 +338,7 @@ def pavicsupdate(solr_server,update_dict):
     solr_server : string
         usually of the form 'http://x.x.x.x:8983/solr/core_name/'
     update_dict : dictionary
-        key:value pairs to update including the id key for reference
+        key:value pairs to update including the id or dataset_id key
 
     Returns
     -------
@@ -347,12 +347,16 @@ def pavicsupdate(solr_server,update_dict):
 
     Notes
     -----
-    1. The current implementation only updates one entry at a time.
+    1. If dataset_id is provided, all entries with that dataset_id will
+       have the provided update applied to them.
 
     """
 
     # Get all the information of the current Solr document
-    my_search = "q=id:%s&wt=json" % (update_dict['id'])
+    if 'id' in update_dict:
+        my_search = "q=id:%s&wt=json" % (update_dict['id'])
+    elif 'dataset_id' in update_dict:
+        my_search = "q=dataset_id:%s&wt=json" % (update_dict['dataset_id'])
     url_request = urllib2.Request(url=solr_server+"select?%s" % (my_search,))
     url_response = urllib2.urlopen(url_request)
     search_result = url_response.read()
@@ -360,12 +364,13 @@ def pavicsupdate(solr_server,update_dict):
     search_dict = json.loads(search_result)
     data = search_dict['response']['docs']
     # Remove self-generated fields
-    for key in ['id','_version_','keywords','abstract']:
-        data[0].pop(key,None)
-    for key,value in update_dict.items():
-        if key == 'id':
-            continue
-        data[0][key] = value
+    for doc in data:
+        for key in ['id','_version_','keywords','abstract']:
+            doc.pop(key,None)
+        for key,value in update_dict.items():
+            if key == 'id':
+                continue
+            doc[key] = value
     return solr_update(data)
 
 def datasets_from_solr_search(solr_search_result):
