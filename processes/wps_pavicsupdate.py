@@ -33,7 +33,7 @@ class PavicsUpdate(Process):
                                'id field of the dataset or file',
                                data_type='string'),
                   LiteralInput('type',
-                               'Dataset or File'
+                               'Dataset or File',
                                data_type='string',
                                default='File',
                                min_occurs=0),
