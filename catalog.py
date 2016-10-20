@@ -371,7 +371,7 @@ def pavicsupdate(solr_server,update_dict):
             if key == 'id':
                 continue
             doc[key] = value
-    return solr_update(data)
+    return solr_update(solr_server,data)
 
 def datasets_from_solr_search(solr_search_result):
     """Convert a Solr search result on files to a dataset search result.
