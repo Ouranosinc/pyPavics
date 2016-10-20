@@ -58,6 +58,7 @@ class PavicsCrawler(Process):
     def _handler(self,request,response):
         update_result = catalog.pavicrawler(thredds_server,solr_server,
                                             my_facets,
+                                            set_dataset_id=True,
                                             internal_ip=internal_ip,
                                             external_ip=external_ip,
                                             output_internal_ip=True)
