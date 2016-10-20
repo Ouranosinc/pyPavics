@@ -1,23 +1,22 @@
 import os
 import time
 import json
-import urllib2
 from pywps import Process,get_format,configuration
-from pywps import LiteralInput,LiteralOutput,ComplexOutput
+from pywps import LiteralInput,ComplexOutput
 
 from pavics import catalog
 
 # Example usage:
 #
 # Check whether certain facets exist for all entries:
-#localhost/pywps?service=WPS&request=execute&version=1.0.0&\
-#identifier=pavicsvalidate&DataInputs=facets=model,variable
+# localhost/pywps?service=WPS&request=execute&version=1.0.0&\
+# identifier=pavicsvalidate&DataInputs=facets=model,variable
 #
 # Check whether certain facets exist for particular files:
-#localhost/pywps?service=WPS&request=execute&version=1.0.0&\
-#identifier=pavicsvalidate&DataInputs=facets=model,variable;\
-#paths=sio%2Fsrtm30_plus_v6,ouranos%2Fsubdaily;\
-#files=srtm30_plus.nc,aev_shum_1961.nc
+# localhost/pywps?service=WPS&request=execute&version=1.0.0&\
+# identifier=pavicsvalidate&DataInputs=facets=model,variable;\
+# paths=sio%2Fsrtm30_plus_v6,ouranos%2Fsubdaily;\
+# files=srtm30_plus.nc,aev_shum_1961.nc
 
 # base_search_URL in the ESGF Search API is now a solr database URL,
 # this is provided as the environment variable SOLR_SERVER.
@@ -28,6 +27,7 @@ json_output_path = configuration.get_config_value('server','outputpath')
 
 json_format = get_format('JSON')
 gmlxml_format = get_format('GML')
+
 
 class PavicsValidate(Process):
     def __init__(self):
@@ -49,7 +49,7 @@ class PavicsValidate(Process):
         outputs = [ComplexOutput('validation_result',
                                  'Validation result',
                                  supported_formats=[json_format])]
-        outputs[0].as_reference=True
+        outputs[0].as_reference = True
 
         super(PavicsValidate,self).__init__(
             self._handler,

@@ -13,8 +13,10 @@ gregorian_months = {1:'January',2:'February',3:'March',4:'April',5:'May',
 
 temperate_seasons = {1:'Spring',2:'Summer',3:'Autumn',4:'Winter'}
 
+
 class CalendarError(Exception):
     pass
+
 
 ##################
 # Cycles in year #
@@ -41,7 +43,8 @@ def months_of_gregorian_calendar(year=0):
 
     """
 
-    return range(1,13)
+    return list(range(1,13))
+
 
 def temperate_seasons(year=0):
     """Temperate seasons.
@@ -64,7 +67,8 @@ def temperate_seasons(year=0):
 
     """
 
-    return range(1,5)
+    return list(range(1,5))
+
 
 def year_cycle(year=0):
     """Year cycle.
@@ -89,6 +93,7 @@ def year_cycle(year=0):
     """
 
     return [0]
+
 
 #################
 # Days in cycle #
@@ -117,7 +122,8 @@ def days_in_month_360(month=0,year=0):
 
     """
 
-    return range(1,31)
+    return list(range(1,31))
+
 
 def days_in_month_365(month,year=0):
     """Days of the month (365 days calendar).
@@ -143,7 +149,8 @@ def days_in_month_365(month,year=0):
     """
 
     days_in_months = [31,28,31,30,31,30,31,31,30,31,30,31]
-    return range(1,days_in_months[month-1]+1)
+    return list(range(1,days_in_months[month-1]+1))
+
 
 def days_in_month_366(month,year=0):
     """Days of the month (366 days calendar).
@@ -169,7 +176,8 @@ def days_in_month_366(month,year=0):
     """
 
     days_in_months = [31,29,31,30,31,30,31,31,30,31,30,31]
-    return range(1,days_in_months[month-1]+1)
+    return list(range(1,days_in_months[month-1]+1))
+
 
 def days_in_month_julian(month,year):
     """Days of the month (Julian calendar).
@@ -197,6 +205,7 @@ def days_in_month_julian(month,year):
         return days_in_month_366(month,year)
     else:
         return days_in_month_365(month,year)
+
 
 def days_in_month_proleptic_gregorian(month,year):
     """Days of the month (Proleptic gregorian calendar).
@@ -226,6 +235,7 @@ def days_in_month_proleptic_gregorian(month,year):
         return days_in_month_365(month,year)
     else:
         return days_in_month_julian(month,year)
+
 
 def days_in_month_gregorian(month,year):
     """Days of the month (Gregorian calendar).
@@ -259,6 +269,7 @@ def days_in_month_gregorian(month,year):
     else:
         return days_in_month_julian(month,year)
 
+
 def days_in_year_365(cycle=0,year=0):
     """Days of the year (365 days calendar).
 
@@ -281,7 +292,8 @@ def days_in_year_365(cycle=0,year=0):
 
     """
 
-    return range(1,366)
+    return list(range(1,366))
+
 
 def day_in_year(cycle=0,year=0):
     """Single day in a year.
@@ -307,6 +319,7 @@ def day_in_year(cycle=0,year=0):
     """
 
     return [1]
+
 
 ###################
 # Leap year check #
@@ -336,9 +349,6 @@ def is_leap_feb29(year,calendar):
         return True
     else:
         return False
-
-
-
 
 
 class Calendar:
@@ -474,16 +484,18 @@ Cal365 = Calendar('noleap',months_of_gregorian_calendar,days_in_month_365,
                   is_leap_feb29)
 Cal366 = Calendar('all_leap',months_of_gregorian_calendar,days_in_month_366,
                   is_leap_feb29)
-CalJulian = Calendar('julian',months_of_gregorian_calendar,days_in_month_julian,
-                     is_leap_feb29)
+CalJulian = Calendar('julian',months_of_gregorian_calendar,
+                     days_in_month_julian,is_leap_feb29)
 CalProleptic = Calendar('proleptic_gregorian',months_of_gregorian_calendar,
                         days_in_month_proleptic_gregorian,is_leap_feb29)
 CalGregorian = Calendar('gregorian',months_of_gregorian_calendar,
                         days_in_month_gregorian,is_leap_feb29)
 CalYearsOnly = Calendar('years_only',year_cycle,day_in_year,is_leap_feb29)
-CalMonthsOnly = Calendar('months_only',months_of_gregorian_calendar,day_in_year)
+CalMonthsOnly = Calendar('months_only',months_of_gregorian_calendar,
+                         day_in_year)
 CalSeasons = Calendar('seasons',temperate_seasons,day_in_year)
 Cal365NoMonths = Calendar('365_days_no_months',year_cycle,days_in_year_365)
+
 
 def calendar_from_alias(calendar_alias):
     """Get a Calendar object from its alias.

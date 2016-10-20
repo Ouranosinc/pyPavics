@@ -1,13 +1,13 @@
 import os
 import time
 from pywps import Process,get_format,configuration
-from pywps import LiteralInput,LiteralOutput,ComplexOutput
+from pywps import ComplexOutput
 
 from pavics import catalog
 
 # Example usage:
-#localhost/pywps?service=WPS&request=execute&version=1.0.0&\
-#identifier=pavicrawler
+# localhost/pywps?service=WPS&request=execute&version=1.0.0&\
+# identifier=pavicrawler
 
 # Current behaviour: values in the NetCDF files take precedence over the
 # values in the Solr database. This could be an option as an input...
@@ -31,11 +31,12 @@ gmlxml_format = get_format('GML')
 
 # Fix for OpenStack internal/external ip:
 # (the internal ip is the environment variable OPENSTACK_INTERNAL_IP)
-if os.environ.has_key('OPENSTACK_INTERNAL_IP'):
+if 'OPENSTACK_INTERNAL_IP' in os.environ:
     internal_ip = os.environ['OPENSTACK_INTERNAL_IP']
 else:
     internal_ip = os.environ['SOLR_SERVER']
 external_ip = os.environ['SOLR_SERVER']
+
 
 class PavicsCrawler(Process):
     def __init__(self):
@@ -43,7 +44,7 @@ class PavicsCrawler(Process):
         outputs = [ComplexOutput('crawler_result',
                                  'PAVICS Crawler Result',
                                  supported_formats=[json_format])]
-        outputs[0].as_reference=True
+        outputs[0].as_reference = True
 
         super(PavicsCrawler,self).__init__(
             self._handler,

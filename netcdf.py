@@ -30,8 +30,10 @@ import numpy as np
 import numpy.ma as ma
 import netCDF4
 
+
 class NetCDFError(Exception):
     pass
+
 
 def datetimes_to_time_vectors(datetimes):
     """Convert list of datetimes to Nx6 matrix.
@@ -57,11 +59,12 @@ def datetimes_to_time_vectors(datetimes):
         return one_datetime.timetuple()[0:6]
 
     try:
-        time_tuples = map(datetime_timetuple,datetimes)
+        time_tuples = list(map(datetime_timetuple,datetimes))
         return ma.array(time_tuples)
-    except AttributeError, TypeError:
+    except (AttributeError, TypeError):
         time_tuple = datetimes.timetuple()
         return ma.array(time_tuple[0:6])
+
 
 def time_vectors_to_datetimes(time_vectors):
     """Convert time vectors to a list of datetime.
@@ -101,7 +104,7 @@ def time_vectors_to_datetimes(time_vectors):
         if irregular_calendar:
             try:
                 ndatetime = netCDF4.netcdftime.datetime(*full_vector)
-                datetime_str = ndatetime.strftime()
+                ndatetime.strftime()
             except (ma.MaskError,ValueError):
                 masked_datetimes.append(0)
             else:
@@ -119,7 +122,7 @@ def time_vectors_to_datetimes(time_vectors):
                     full_vector[s] = 0
             try:
                 ndatetime = netCDF4.netcdftime.datetime(*full_vector)
-                datetime_str = ndatetime.strftime()
+                ndatetime.strftime()
             except (ma.MaskError,ValueError):
                 masked_datetimes.append(i)
             else:
@@ -138,6 +141,7 @@ def time_vectors_to_datetimes(time_vectors):
         return ncdatetimes,np.array(masked_datetimes),np.array(valid_datetimes)
     else:
         return datetimes,np.array(masked_datetimes),np.array(valid_datetimes)
+
 
 def validate_calendar(calendar):
     """Validate calendar string for CF Conventions.
@@ -165,7 +169,8 @@ def validate_calendar(calendar):
     elif calendar == 'none':
         raise NotImplementedError("calendar is set to 'none'")
     else:
-        raise NetCDFError("Unknown calendar: %s" % (nc_source.calendar,))
+        raise NetCDFError("Unknown calendar: %s" % (calendar,))
+
 
 def _calendar_from_ncdataset(ncdataset):
     """Get calendar from a netCDF4._netCDF4.Dataset object.
@@ -188,13 +193,14 @@ def _calendar_from_ncdataset(ncdataset):
 
     """
 
-    if ncdataset.variables.has_key('time'):
+    if 'time' in ncdataset.variables:
         if hasattr(ncdataset.variables['time'],'calendar'):
             return validate_calendar(ncdataset.variables['time'].calendar)
         else:
             return 'gregorian'
     else:
         raise NetCDFError("NetCDF file has no time variable")
+
 
 def get_calendar(nc_resource):
     """Get calendar from a NetCDF resource.
@@ -219,8 +225,8 @@ def get_calendar(nc_resource):
 
     if hasattr(nc_resource,'calendar'):
         return validate_calendar(nc_resource.calendar)
-    elif hasattr(nc_resource,'variables') and \
-         hasattr(nc_resource.variables,'has_key'):
+    elif (hasattr(nc_resource,'variables') and
+          hasattr(nc_resource.variables,'has_key')):
         return _calendar_from_ncdataset(nc_resource)
     else:
         try:
@@ -230,8 +236,9 @@ def get_calendar(nc_resource):
                                "resource: %s") % (str(nc_resource),))
         return _calendar_from_ncdataset(nc)
 
-def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],renames=None,
-                  defaults=None,appends=None):
+
+def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],
+                  renames=None,defaults=None,appends=None):
     """Copy attributes from source file to destination file.
 
     Parameters
@@ -273,7 +280,7 @@ def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],renames=None,
         attributes = includes
     for attribute in attributes:
         if attribute not in excludes:
-            if attribute not in renames.keys():
+            if attribute not in renames:
                 renames[attribute] = attribute
             if renames[attribute] == '_FillValue':
                 continue
@@ -284,7 +291,7 @@ def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],renames=None,
             except (AttributeError,UnicodeEncodeError):
                 pass
             nc_destination.__setattr__(renames[attribute],copy_attr)
-    for attribute in defaults.keys():
+    for attribute in defaults:
         if not hasattr(nc_destination,attribute):
             # hack for bypassing unicode bug
             try:
@@ -292,7 +299,7 @@ def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],renames=None,
             except (AttributeError,UnicodeEncodeError):
                 default_attr = defaults[attribute]
             nc_destination.__setattr__(attribute,default_attr)
-    for attribute in appends.keys():
+    for attribute in appends:
         if hasattr(nc_destination,attribute):
             warp = getattr(nc_destination,attribute)
             # hack for bypassing unicode bug
@@ -309,6 +316,7 @@ def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],renames=None,
             except (AttributeError,UnicodeEncodeError):
                 append_attr = appends[attribute]
             nc_destination.__setattr__(attribute,append_attr)
+
 
 def nc_copy_dimensions(nc_source,nc_destination,includes=[],excludes=[],
                        renames=None,defaults=None,reshapes=None):
@@ -340,8 +348,8 @@ def nc_copy_dimensions(nc_source,nc_destination,includes=[],excludes=[],
         defaults = {}
     if reshapes is None:
         reshapes = {}
-    dims_src = nc_source.dimensions.keys()
-    dims_dest = nc_destination.dimensions.keys()
+    dims_src = list(nc_source.dimensions)
+    dims_dest = list(nc_destination.dimensions)
     if includes:
         for include in includes:
             if include not in dims_src:
@@ -350,7 +358,7 @@ def nc_copy_dimensions(nc_source,nc_destination,includes=[],excludes=[],
     for dim_src in dims_src:
         if dim_src in excludes:
             continue
-        if dim_src not in renames.keys():
+        if dim_src not in renames:
             renames[dim_src] = dim_src
         if renames[dim_src] not in dims_dest:
             ncdim1 = nc_source.dimensions[dim_src]
@@ -361,9 +369,10 @@ def nc_copy_dimensions(nc_source,nc_destination,includes=[],excludes=[],
                     reshapes[renames[dim_src]] = len(ncdim1)
             nc_destination.createDimension(renames[dim_src],
                                            reshapes[renames[dim_src]])
-    for dim in defaults.keys():
-        if not dim in nc_destination.dimensions.keys():
+    for dim in defaults:
+        if dim not in nc_destination.dimensions:
             nc_destination.createDimension(dim,defaults[dim])
+
 
 def nc_copy_variables_structure(nc_source,nc_destination,includes=[],
                                 excludes=[],renames=None,new_dtype=None,
@@ -392,8 +401,8 @@ def nc_copy_variables_structure(nc_source,nc_destination,includes=[],
         new_dimensions = {}
     if create_args is None:
         create_args = {}
-    vars_src = nc_source.variables.keys()
-    vars_dest = nc_destination.variables.keys()
+    vars_src = list(nc_source.variables)
+    vars_dest = list(nc_destination.variables)
     if includes:
         for include in includes:
             if include not in vars_src:
@@ -404,22 +413,22 @@ def nc_copy_variables_structure(nc_source,nc_destination,includes=[],
             continue
         if var_src not in vars_dest:
             ncvar1 = nc_source.variables[var_src]
-            if var_src not in renames.keys():
+            if var_src not in renames:
                 renames[var_src] = var_src
-            if var_src not in new_dtype.keys():
+            if var_src not in new_dtype:
                 new_dtype[var_src] = ncvar1.dtype
-            if var_src not in new_dimensions.keys():
+            if var_src not in new_dimensions:
                 new_dimensions[var_src] = ncvar1.dimensions
-            if var_src not in create_args.keys():
+            if var_src not in create_args:
                 create_args[var_src] = {}
-            if '_global' in create_args.keys():
-                for key in create_args['_global'].keys():
+            if '_global' in create_args:
+                for key in create_args['_global']:
                     if key not in create_args[var_src]:
                         create_args[var_src][key] = create_args['_global'][key]
-            warp = 'fill_value' not in create_args[var_src].keys()
+            warp = 'fill_value' not in create_args[var_src]
             if hasattr(ncvar1,'_FillValue') and warp:
                 create_args[var_src]['fill_value'] = ncvar1._FillValue
-            if not create_args[var_src].has_key('chunksizes'):
+            if 'chunksizes' not in create_args[var_src]:
                 # If dimensions size have changed it is not safe to copy
                 # chunksizes.
                 for one_dimension in new_dimensions[var_src]:
@@ -437,6 +446,7 @@ def nc_copy_variables_structure(nc_source,nc_destination,includes=[],
             nc_destination.createVariable(renames[var_src],new_dtype[var_src],
                                           new_dimensions[var_src],
                                           **create_args[var_src])
+
 
 def nc_copy_variables_attributes(nc_source,nc_destination,includes=[],
                                  excludes=[],renames=None,attr_includes=None,
@@ -477,8 +487,8 @@ def nc_copy_variables_attributes(nc_source,nc_destination,includes=[],
         attr_defaults = {}
     if attr_appends is None:
         attr_appends = {}
-    vars_src = nc_source.variables.keys()
-    vars_dest = nc_destination.variables.keys()
+    vars_src = list(nc_source.variables)
+    vars_dest = list(nc_destination.variables)
     if includes:
         for include in includes:
             if include not in vars_src:
@@ -488,26 +498,27 @@ def nc_copy_variables_attributes(nc_source,nc_destination,includes=[],
         if var_src in excludes:
             continue
         ncvar1 = nc_source.variables[var_src]
-        if var_src not in renames.keys():
+        if var_src not in renames:
             renames[var_src] = var_src
         if renames[var_src] not in vars_dest:
-            raise NotImplementedError("Variable not found in destination file.")
+            raise NotImplementedError("Variable not found in dest. file.")
         ncvar2 = nc_destination.variables[renames[var_src]]
-        if var_src not in attr_includes.keys():
+        if var_src not in attr_includes:
             attr_includes[var_src] = []
-        if var_src not in attr_excludes.keys():
+        if var_src not in attr_excludes:
             attr_excludes[var_src] = []
-        if '_global' in attr_excludes.keys():
+        if '_global' in attr_excludes:
             attr_excludes[var_src].extend(attr_excludes['_global'])
-        if var_src not in attr_renames.keys():
+        if var_src not in attr_renames:
             attr_renames[var_src] = {}
-        if var_src not in attr_defaults.keys():
+        if var_src not in attr_defaults:
             attr_defaults[var_src] = {}
-        if var_src not in attr_appends.keys():
+        if var_src not in attr_appends:
             attr_appends[var_src] = {}
         nc_copy_attrs(ncvar1,ncvar2,attr_includes[var_src],
                       attr_excludes[var_src],attr_renames[var_src],
                       attr_defaults[var_src],attr_appends[var_src])
+
 
 def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
                            renames=None,source_slices=None,
@@ -530,8 +541,8 @@ def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
         source_slices = {}
     if destination_slices is None:
         destination_slices = {}
-    vars_src = nc_source.variables.keys()
-    vars_dest = nc_destination.variables.keys()
+    vars_src = list(nc_source.variables)
+    vars_dest = list(nc_destination.variables)
     if includes:
         for include in includes:
             if include not in vars_src:
@@ -541,16 +552,17 @@ def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
         if var_src in excludes:
             continue
         ncvar1 = nc_source.variables[var_src]
-        if var_src not in renames.keys():
+        if var_src not in renames:
             renames[var_src] = var_src
         if renames[var_src] not in vars_dest:
-            raise NotImplementedError("Variable not found in destination file.")
+            raise NotImplementedError("Variable not found in dest. file.")
         ncvar2 = nc_destination.variables[renames[var_src]]
         if var_src in source_slices:
             raise NotImplementedError("Slice copies.")
         if renames[var_src] in destination_slices:
             raise NotImplementedError("Slice copies.")
         ncvar2[...] = ncvar1[...]
+
 
 def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
                         use_level=False,use_lat=True,use_lon=True,
@@ -617,25 +629,25 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
 
     # Template for CF-1.6 convention in python, using netCDF4.
     # http://cfconventions.org/
-    
+
     # Aliases for default fill values
-    defi2 = netCDF4.default_fillvals['i2']
-    defi4 = netCDF4.default_fillvals['i4']
-    deff4 = netCDF4.default_fillvals['f4']
-    
+    #defi2 = netCDF4.default_fillvals['i2']
+    #defi4 = netCDF4.default_fillvals['i4']
+    #deff4 = netCDF4.default_fillvals['f4']
+
     # Create netCDF file
     # Valid formats are 'NETCDF4', 'NETCDF4_CLASSIC', 'NETCDF3_CLASSIC' and
     # 'NETCDF3_64BIT'
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     nc1 = netCDF4.Dataset(nc_file,'w',format=nc_format)
-    
+
     # 2.6.1 Identification of Conventions
     nc1.Conventions = 'CF-1.6'
-    
+
     # 2.6.2. Description of file contents
     nc1.title = 'Dummy NetCDF file'
     nc1.history = "%s: File creation." % (now,)
-    
+
     # Create netCDF dimensions
     if use_time:
         nc1.createDimension('time',time_size)
@@ -651,7 +663,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
         nc1.createDimension('yc',yc_size)
     if use_xc:
         nc1.createDimension('xc',xc_size)
-    
+
     # Create netCDF variables
     # Compression parameters include:
     # zlib=True,complevel=9,least_significant_digit=1
@@ -675,7 +687,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
         # 4.4.1. Calendar
         time.calendar = time_calendar
         if time_values is None:
-            time[:] = range(time_num_values)
+            time[:] = list(range(time_num_values))
         else:
             time[:] = time_values[:]
 
@@ -687,7 +699,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
         level.positive = level_positive
         #level.long_name = 'air_pressure'
         #level.standard_name = 'air_pressure'
-        raise NotImplementedError() # need to fill level[:]
+        raise NotImplementedError()  # need to fill level[:]
 
     if use_lat:
         # 4.1. Latitude Coordinate
@@ -717,7 +729,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
 
     if use_xc:
         raise NotImplementedError()
-    
+
     # 2.3. Naming Conventions
     # 2.4 Dimensions
     #     If any or all of the dimensions of a variable have the
@@ -773,12 +785,13 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
             masked_values = 0
         data_size_mb = data1.nbytes/1000000.0
         var1[...] = ma.reshape(data1,var1.shape)
-    
+
     nc1.close()
 
     if verbose:
         str1 = "%s values, %s masked, for %s Mb of uncompressed data."
-        print str1 % (str(num_values),str(masked_values),str(data_size_mb))
+        print(str1 % (str(num_values),str(masked_values),str(data_size_mb)))
+
 
 def period2indices(initial_date,final_date,nc_file,calendar=None):
     """Find indices corresponding to a given period.
@@ -815,7 +828,7 @@ def period2indices(initial_date,final_date,nc_file,calendar=None):
     final_time = time.strptime(final_date,'%Y-%m-%dT%H:%M:%S')
 
     nc = netCDF4.Dataset(nc_file,'r')
-    if not nc.variables.has_key('time'):
+    if 'time' not in nc.variables:
         raise NetCDFError("No time variable in the NetCDF file.")
     nctime = nc.variables['time']
     if calendar is None:

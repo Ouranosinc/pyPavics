@@ -1,21 +1,19 @@
 import os
 import time
-import json
-import urllib2
 from pywps import Process,get_format,configuration
-from pywps import LiteralInput,LiteralOutput,ComplexOutput
+from pywps import LiteralInput,ComplexOutput
 
 from pavics import catalog
 
 # Example usage:
 #
 # List facets values:
-#localhost/pywps?service=WPS&request=execute&version=1.0.0&\
-#identifier=pavicsearch&DataInputs=facets=*
+# localhost/pywps?service=WPS&request=execute&version=1.0.0&\
+# identifier=pavicsearch&DataInputs=facets=*
 #
 # Search by facet:
-#localhost/pywps?service=WPS&request=execute&version=1.0.0&\
-#identifier=pavicsearch&DataInputs=constraints=model:CRCM4,experiment:rcp85
+# localhost/pywps?service=WPS&request=execute&version=1.0.0&\
+# identifier=pavicsearch&DataInputs=constraints=model:CRCM4,experiment:rcp85
 
 # base_search_URL in the ESGF Search API is now a solr database URL,
 # this is provided as the environment variable SOLR_SERVER.
@@ -26,6 +24,7 @@ json_output_path = configuration.get_config_value('server','outputpath')
 
 json_format = get_format('JSON')
 gmlxml_format = get_format('GML')
+
 
 class PavicsSearch(Process):
     def __init__(self):
@@ -50,7 +49,7 @@ class PavicsSearch(Process):
                   LiteralInput('limit',
                                'Pagination limit',
                                data_type='integer',
-                               default=0, # Unable to set to 10, pywps bug.
+                               default=0,  # Unable to set to 10, pywps bug.
                                min_occurs=0,
                                mode=None),
                   LiteralInput('fields',
@@ -94,7 +93,7 @@ class PavicsSearch(Process):
                                  'PAVICS Catalogue Search Result',
                                  supported_formats=[json_format,
                                                     gmlxml_format])]
-        outputs[0].as_reference=True
+        outputs[0].as_reference = True
 
         super(PavicsSearch,self).__init__(
             self._handler,

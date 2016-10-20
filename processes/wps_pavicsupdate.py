@@ -1,16 +1,14 @@
 import os
 import time
-import json
-import urllib2
 from pywps import Process,get_format,configuration
-from pywps import LiteralInput,LiteralOutput,ComplexOutput
+from pywps import LiteralInput,ComplexOutput
 
 from pavics import catalog
 
 # Example usage:
-#localhost/pywps?service=WPS&request=execute&version=1.0.0&\
-#identifier=pavicsupdate&DataInputs=source=source_string;url=url_string;\
-#updates=subject:new_subject,units:m
+# localhost/pywps?service=WPS&request=execute&version=1.0.0&\
+# identifier=pavicsupdate&DataInputs=source=source_string;url=url_string;\
+# updates=subject:new_subject,units:m
 
 # Still need to perhaps validate the inputs, and consider whether we want
 # to do updates that involve list of entries (not tested yet)
@@ -24,6 +22,7 @@ json_output_path = configuration.get_config_value('server','outputpath')
 
 json_format = get_format('JSON')
 gmlxml_format = get_format('GML')
+
 
 class PavicsUpdate(Process):
     def __init__(self):
@@ -44,7 +43,7 @@ class PavicsUpdate(Process):
         outputs = [ComplexOutput('update_result',
                                  'PAVICS Catalogue Update Result',
                                  supported_formats=[json_format])]
-        outputs[0].as_reference=True
+        outputs[0].as_reference = True
 
         super(PavicsUpdate,self).__init__(
             self._handler,

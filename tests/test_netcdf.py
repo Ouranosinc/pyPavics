@@ -1,9 +1,8 @@
 import unittest
-
 import os
-import netCDF4
 
 import pavics.netcdf as pavnc
+
 
 class TestNetCDF(unittest.TestCase):
 

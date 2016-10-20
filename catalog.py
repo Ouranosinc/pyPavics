@@ -19,6 +19,7 @@ import urllib2
 import threddsclient
 import netCDF4
 
+
 def solr_update(solr_server,update_data):
     """Update data in a Solr database.
 
@@ -54,6 +55,7 @@ def solr_update(solr_server,update_data):
     url_response.close()
 
     return update_result
+
 
 def thredds_crawler(thredds_server,index_facets,depth=50,
                     ignored_variables=None,set_dataset_id=False,
@@ -119,7 +121,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
         # Modifying all the ip addresses if there is an issue of
         # internal/external ips (e.g. OpenStack)
         if internal_ip is not None:
-            for key in urls.keys():
+            for key in urls:
                 if output_internal_ip:
                     urls[key] = urls[key].replace(external_ip,internal_ip)
                 else:
@@ -127,7 +129,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
         # Default Birdhouse catalog entry
         doc = {'url':urls['download_url'],
                'source':os.path.join(urls['thredds_server'],'catalog.xml'),
-               'catalog_url':urls['catalog_url']+'?dataset='+\
+               'catalog_url':urls['catalog_url']+'?dataset='+
                              thredds_dataset.ID,
                'category':'thredds',
                'content_type':thredds_dataset.content_type,
@@ -149,7 +151,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
             elif hasattr(nc,facet+'_id'):
                 doc[facet] = getattr(nc,facet+'_id')
         if ignored_variables != 'all':
-            for var_name in nc.variables.keys():
+            for var_name in nc.variables:
                 if var_name in ignored_variables:
                     continue
                 ncvar = nc.variables[var_name]
@@ -161,7 +163,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
                     continue
                 for parameter_name in ['variable','cf_standard_name',
                                        'variable_long_name','units']:
-                    if not doc.has_key(parameter_name):
+                    if parameter_name not in doc:
                         doc[parameter_name] = []
                 doc['variable'].append(var_name)
                 if ccf:
@@ -181,6 +183,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
         nc.close()
         add_data.append(doc)
     return add_data
+
 
 def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
                 ignored_variables=None,set_dataset_id=False,
@@ -234,6 +237,7 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
                                output_internal_ip=output_internal_ip)
     return solr_update(solr_server,add_data)
 
+
 def pavicsvalidate(solr_server,required_facets,limit_paths=None,
                    limit_files=None):
     """Query Solr database for entries with missing required facets.
@@ -269,7 +273,7 @@ def pavicsvalidate(solr_server,required_facets,limit_paths=None,
     # Note that in Solr, if indexing changes due to document modification,
     # or new documents, the pagination loop could return the same
     # document twice or miss a document.
-    #https://cwiki.apache.org/confluence/display/solr/Pagination+of+Results
+    # https://cwiki.apache.org/confluence/display/solr/Pagination+of+Results
     incomplete_docs = []
     while True:
         limit_search = ''
@@ -301,11 +305,11 @@ def pavicsvalidate(solr_server,required_facets,limit_paths=None,
         if not len(search_dict['response']['docs']):
             break
         for doc in search_dict['response']['docs']:
-            if (not doc.has_key('source')) or (not doc.has_key('url')):
+            if ('source' not in doc) or ('url' not in doc):
                 continue
             missing_facets = []
             for required_facet in required_facets:
-                if not doc.has_key(required_facet):
+                if required_facet not in doc:
                     missing_facets.append(required_facet)
                     continue
                 # If it's a list, it must contain values. Those set to
@@ -329,6 +333,7 @@ def pavicsvalidate(solr_server,required_facets,limit_paths=None,
                                         'missing_facets':missing_facets})
         n += nrows
     return incomplete_docs
+
 
 def pavicsupdate(solr_server,update_dict):
     """Update a Solr entry identified by its id using (key,value) pairs.
@@ -367,11 +372,12 @@ def pavicsupdate(solr_server,update_dict):
     for doc in data:
         for key in ['id','_version_','keywords','abstract']:
             doc.pop(key,None)
-        for key,value in update_dict.items():
+        for (key, value) in update_dict.items():
             if key == 'id':
                 continue
             doc[key] = value
     return solr_update(solr_server,data)
+
 
 def datasets_from_solr_search(solr_search_result):
     """Convert a Solr search result on files to a dataset search result.
@@ -433,6 +439,7 @@ def datasets_from_solr_search(solr_search_result):
     n = len(search_results['response']['docs'])
     search_results['response']['numFound'] = n
     return json.dumps(search_results)
+
 
 def pavicsearch(solr_server,facets=None,limit=10,offset=0,
                 search_type='Dataset',output_format='application/solr+json',

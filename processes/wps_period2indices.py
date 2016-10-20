@@ -1,18 +1,16 @@
-import time
 from pywps import Process
-from pywps import LiteralInput,LiteralOutput,ComplexOutput
-
-import netCDF4
+from pywps import LiteralInput,LiteralOutput
 
 from pavics import netcdf as pavnc
 
 # Example usage:
 #
-#localhost/pywps?service=WPS&request=execute&version=1.0.0&\
-#identifier=period2indices&DataInputs=initial_date=1962-02-03T00:00:00;\
-#final_date=1962-03-31T23:59:59;\
-#opendap_url=http://132.217.140.45:8083/thredds/dodsC/birdhouse/ouranos/\
-#subdaily/aev/shum/aev_shum_1962.nc
+# localhost/pywps?service=WPS&request=execute&version=1.0.0&\
+# identifier=period2indices&DataInputs=initial_date=1962-02-03T00:00:00;\
+# final_date=1962-03-31T23:59:59;\
+# opendap_url=http://132.217.140.45:8083/thredds/dodsC/birdhouse/ouranos/\
+# subdaily/aev/shum/aev_shum_1962.nc
+
 
 class Period2Indices(Process):
     def __init__(self):
