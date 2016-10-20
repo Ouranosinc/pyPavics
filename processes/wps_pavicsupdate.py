@@ -36,7 +36,8 @@ class PavicsUpdate(Process):
                                'Dataset or File',
                                data_type='string',
                                default='File',
-                               min_occurs=0),
+                               min_occurs=0,
+                               mode=None),
                   LiteralInput('updates',
                                'Fields to update with their new values',
                                data_type='string'),]
