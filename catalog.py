@@ -59,8 +59,8 @@ def solr_update(solr_server,update_data):
 
 def thredds_crawler(thredds_server,index_facets,depth=50,
                     ignored_variables=None,set_dataset_id=False,
-                    internal_ip=None,external_ip=None,
-                    output_internal_ip=False):
+                    overwrite_dataset_id=False,internal_ip=None,
+                    external_ip=None,output_internal_ip=False):
     """Crawl thredds server for metadata.
 
     Parameters
@@ -79,6 +79,10 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
     set_dataset_id : bool
         if true, the files that are in a common directory will have
         their dataset_id set to reflect that unique relative directory
+    overwrite_dataset_id : bool
+        if set_dataset_id is True, this decides whether the default value
+        constructed by the crawler takes precedence over the dataset_id in
+        the NetCDF file.
     internal_ip : string
     external_ip : string
     output_internal_ip : bool
@@ -144,6 +148,11 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
             ci = urls['catalog_url'].find('/catalog.xml')
             did = '.'.join(urls['catalog_url'][:ci].split('/')[6:])
             doc['dataset_id'] = did
+            if overwrite_dataset_id and ('dataset_id' in index_facets):
+                index_facets.remove('dataset_id')
+            elif (not overwrite_dataset_id) and \
+                 ('dataset_id' not in index_facets):
+                index_facets.append('dataset_id')
         # Add custom facets
         for facet in index_facets:
             if hasattr(nc,facet):
@@ -187,7 +196,8 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
 
 def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
                 ignored_variables=None,set_dataset_id=False,
-                internal_ip=None,external_ip=None,output_internal_ip=False):
+                overwrite_dataset_id=False,internal_ip=None,
+                external_ip=None,output_internal_ip=False):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -206,8 +216,12 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
         ignore everything (only global attributes will be added to the
         database)
     set_dataset_id : bool
-        if true, the files that are in a common directory will have
+        if True, the files that are in a common directory will have
         their dataset_id set to reflect that unique relative directory
+    overwrite_dataset_id : bool
+        if set_dataset_id is True, this decides whether the default value
+        constructed by the crawler takes precedence over the dataset_id in
+        the NetCDF file.
     internal_ip : string
     external_ip : string
     output_internal_ip : bool
@@ -233,6 +247,7 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
     add_data = thredds_crawler(thredds_server,index_facets,depth=50,
                                ignored_variables=ignored_variables,
                                set_dataset_id=set_dataset_id,
+                               overwrite_dataset_id=overwrite_dataset_id,
                                internal_ip=internal_ip,external_ip=external_ip,
                                output_internal_ip=output_internal_ip)
     return solr_update(solr_server,add_data)
@@ -420,22 +435,15 @@ def datasets_from_solr_search(solr_search_result):
             doc['opendap_urls'] = [doc['opendap_url']]
             doc['urls'] = [doc['url']]
             doc['wms_urls'] = [doc['wms_url']]
-            doc.pop('abstract',None)
-            doc.pop('catalog_url',None)
-            doc.pop('id',None)
-            doc.pop('last_modified',None)
-            doc.pop('opendap_url',None)
-            doc.pop('resourcename',None)
-            doc.pop('title',None)
-            doc.pop('url',None)
-            doc.pop('wms_url',None)
+            for key in ['abstract','catalog_url','id','last_modified',
+                        'opendap_url','resourcename','title','url','wms_url']:
+                doc.pop(key,None)
     for i in range(len(search_results['response']['docs'])-1,-1,-1):
         if i not in first_instances:
             search_results['response']['docs'].pop(i)
     for doc in search_results['response']['docs']:
-        doc['opendap_urls'].sort()
-        doc['urls'].sort()
-        doc['wms_urls'].sort()
+        for key in ['catalog_urls','opendap_urls','urls','wms_urls']:
+            doc[key].sort()
     n = len(search_results['response']['docs'])
     search_results['response']['numFound'] = n
     return json.dumps(search_results)
