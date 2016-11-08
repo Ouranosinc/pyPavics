@@ -566,7 +566,7 @@ def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
 
 def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
                         use_level=False,use_lat=True,use_lon=True,
-                        use_station=False,use_yc=False,use_xc=False,
+                        use_station=False,use_ycxc=False,
                         time_size=None,time_num_values=1,level_size=1,
                         lat_size=1,lon_size=1,station_size=1,yc_size=1,
                         xc_size=1,time_dtype='i2',
@@ -575,7 +575,8 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
                         level_units='Pa',level_positive='up',
                         var_name='dummy',var_dtype='f4',data_scale_factor=1.0,
                         data_add_offset=0.0,fill_mode='random',
-                        time_values=None,verbose=False):
+                        time_values=None,lon_values=None,lat_values=None,
+                        verbose=False):
     """
     Create a dummy NetCDF file on disk.
 
@@ -589,8 +590,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
     use_lat : bool
     use_lon : bool
     use_station : bool
-    use_yc : bool
-    use_xc : bool
+    use_ycxc : bool
     time_size : int or None
     time_num_values : int
     level_size : int
@@ -611,6 +611,8 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
     data_add_offset : float
     fill_mode : str
     time_values : numpy.ndarray
+    lon_values : numpy.ndarray
+    lat_values : numpy.ndarray
     verbose : bool
 
     Notes
@@ -708,8 +710,11 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
         lat.units = 'degrees_north'
         lat.long_name = 'latitude'
         lat.standard_name = 'latitude'
-        dlat = 180.0/(lat_size+1)
-        lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+        if lat_values is None:
+            dlat = 180.0/(lat_size+1)
+            lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+        else:
+            lat[:] = lat_values[:]
 
     if use_lon:
         # 4.2. Longitude Coordinate
@@ -718,17 +723,57 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
         lon.units = 'degrees_east'
         lon.long_name = 'longitude'
         lon.standard_name = 'longitude'
-        dlon = 360.0/lon_size
-        lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+        if lon_values is None:
+            dlon = 360.0/lon_size
+            lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+        else:
+            lon[:] = lon_values[:]
 
     if use_station:
-        raise NotImplementedError()
+        lat = nc1.createVariable('lat','f4',('station',),zlib=True)
+        lat.axis = 'Y'
+        lat.units = 'degrees_north'
+        lat.long_name = 'latitude'
+        lat.standard_name = 'latitude'
+        if lat_values is None:
+            dlat = 180.0/(lat_size+1)
+            lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+        else:
+            lat[:] = lat_values[:]
+        lon = nc1.createVariable('lon','f4',('station',),zlib=True)
+        lon.axis = 'X'
+        lon.units = 'degrees_east'
+        lon.long_name = 'longitude'
+        lon.standard_name = 'longitude'
+        if lon_values is None:
+            dlon = 360.0/lon_size
+            lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+        else:
+            lon[:] = lon_values[:]
 
-    if use_yc:
-        raise NotImplementedError()
-
-    if use_xc:
-        raise NotImplementedError()
+    if use_ycxc:
+        lat = nc1.createVariable('lat','f4',('yc','xc'),zlib=True)
+        lat.axis = 'Y'
+        lat.units = 'degrees_north'
+        lat.long_name = 'latitude'
+        lat.standard_name = 'latitude'
+        if lat_values is None:
+            raise NotImplementedError()
+            #dlat = 180.0/(lat_size+1)
+            #lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+        else:
+            lat[:,:] = lat_values[:,:]
+        lon = nc1.createVariable('lon','f4',('yc','xc'),zlib=True)
+        lon.axis = 'X'
+        lon.units = 'degrees_east'
+        lon.long_name = 'longitude'
+        lon.standard_name = 'longitude'
+        if lon_values is None:
+            raise NotImplementedError()
+            #dlon = 360.0/lon_size
+            #lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+        else:
+            lon[:,:] = lon_values[:,:]
 
     # 2.3. Naming Conventions
     # 2.4 Dimensions
@@ -753,9 +798,8 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
         var_dims.append('lon')
     if use_station:
         var_dims.append('station')
-    if use_yc:
+    if use_ycxc:
         var_dims.append('yc')
-    if use_xc:
         var_dims.append('xc')
     var1 = nc1.createVariable(var_name,var_dtype,tuple(var_dims),zlib=True,
                               chunksizes=None,
