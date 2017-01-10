@@ -661,9 +661,8 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
         nc1.createDimension('lon',lon_size)
     if use_station:
         nc1.createDimension('station',station_size)
-    if use_yc:
+    if use_ycxc:
         nc1.createDimension('yc',yc_size)
-    if use_xc:
         nc1.createDimension('xc',xc_size)
 
     # Create netCDF variables

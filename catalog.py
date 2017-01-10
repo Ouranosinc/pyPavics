@@ -15,9 +15,36 @@ Functions:
 import os
 import json
 import urllib2
+import requests
 
 import threddsclient
 import netCDF4
+
+
+def solr_add_field(solr_server,field_name,field_type='string'):
+    """Add a field in a Solr database.
+
+    Parameters
+    ----------
+    solr_server : string
+        usually of the form 'http://x.x.x.x:8983/solr/core_name/'
+    field_name : string
+    field_type : string
+
+    Returns
+    -------
+    out : string
+        json response from the Solr server
+
+    """
+
+    schema_path = os.path.join(solr_server,'schema')
+    add_field = {'add-field':{'name':field_name,
+                              'type':field_type,
+                              'stored':'true'}}
+    headers = {'Content-type':'application/json'}
+    r = requests.post(schema_path,data=json.dumps(add_field),headers=headers)
+    return r._content
 
 
 def solr_update(solr_server,update_data):
@@ -48,7 +75,22 @@ def solr_update(solr_server,update_data):
         if err.msg == 'Bad Request':
             # One of the most likely reason for this is trying to add
             # a field that is not part of the Solr Schema.
-            return 'Unknown field'
+            fields_path = os.path.join(solr_server,'schema','fields?wt=json')
+            fields_request = urllib2.urlopen(fields_path)
+            fields_response = json.loads(fields_request.read())
+            list_of_fields = []
+            for one_field in fields_response['fields']:
+                list_of_fields.append(one_field['name'])
+            if not hasattr(update_data,'append'):
+                update_data = [update_data]
+            for one_update in update_data:
+                for one_key in one_update.keys():
+                    if one_key not in list_of_fields:
+                        # New fields are added as string type (default)
+                        solr_add_field(solr_server,one_key)
+                        list_of_fields.append(one_key)
+            url_response = urllib2.urlopen(url_request)
+            #return 'Unknown field'
         else:
             raise err
     update_result = url_response.read()
@@ -60,7 +102,8 @@ def solr_update(solr_server,update_data):
 def thredds_crawler(thredds_server,index_facets,depth=50,
                     ignored_variables=None,set_dataset_id=False,
                     overwrite_dataset_id=False,internal_ip=None,
-                    external_ip=None,output_internal_ip=False):
+                    external_ip=None,output_internal_ip=False,
+                    wms_original_server=None,wms_alternate_server=None):
     """Crawl thredds server for metadata.
 
     Parameters
@@ -86,6 +129,8 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
     internal_ip : string
     external_ip : string
     output_internal_ip : bool
+    wms_original_server : string
+    wms_alternate_server : string
 
     Returns
     -------
@@ -110,11 +155,16 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
 
     add_data = []
     for thredds_dataset in threddsclient.crawl(thredds_server,depth=depth):
+        wms_url = thredds_dataset.wms_url()
+        # Change wms_url server if requested
+        if wms_alternate_server is not None:
+            wms_url = wms_url.replace(wms_original_server,
+                                      wms_alternate_server,1)
         urls = {'opendap_url':thredds_dataset.opendap_url(),
                 'download_url':thredds_dataset.download_url(),
                 'thredds_server':thredds_server,
                 'catalog_url':thredds_dataset.catalog.url,
-                'wms_url':thredds_dataset.wms_url()}
+                'wms_url':wms_url}
         # Here, if opening the NetCDF file fails, we simply continue
         # to the next one. Perhaps a way to track the erroneous files
         # should be considered...
