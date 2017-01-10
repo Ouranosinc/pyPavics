@@ -247,7 +247,8 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
 def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
                 ignored_variables=None,set_dataset_id=False,
                 overwrite_dataset_id=False,internal_ip=None,
-                external_ip=None,output_internal_ip=False):
+                external_ip=None,output_internal_ip=False,
+                wms_original_server=None,wms_alternate_server=None):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -275,6 +276,8 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
     internal_ip : string
     external_ip : string
     output_internal_ip : bool
+    wms_original_server : string
+    wms_alternate_server : string
 
     Returns
     -------
@@ -299,7 +302,9 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
                                set_dataset_id=set_dataset_id,
                                overwrite_dataset_id=overwrite_dataset_id,
                                internal_ip=internal_ip,external_ip=external_ip,
-                               output_internal_ip=output_internal_ip)
+                               output_internal_ip=output_internal_ip
+                               wms_original_server=wms_original_server,
+                               wms_alternate_server=wms_alternate_server)
     return solr_update(solr_server,add_data)
 
 
