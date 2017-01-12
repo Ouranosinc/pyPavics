@@ -32,10 +32,10 @@ setup(
     long_description=README + '\n\n' + HISTORY,
     author=__author__,
     author_email=__email__,
-    url='https://github.com/byrnsda/pavics',
+    url='https://github.com/Ouranosinc/pyPavics',
     platforms=['linux_x86_64'],
     license="ISCL",
-    keywords='pavics',
+    keywords='pavics climate meteorology',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
@@ -45,6 +45,7 @@ setup(
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
+        'Topic :: Scientific/Engineering :: Atmospheric Science',
     ],
 
     # -- Package structure -------------------------------------------------
