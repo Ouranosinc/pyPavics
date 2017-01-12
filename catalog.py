@@ -103,7 +103,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
                     ignored_variables=None,set_dataset_id=False,
                     overwrite_dataset_id=False,internal_ip=None,
                     external_ip=None,output_internal_ip=False,
-                    wms_original_server=None,wms_alternate_server=None):
+                    wms_alternate_server=None):
     """Crawl thredds server for metadata.
 
     Parameters
@@ -129,7 +129,6 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
     internal_ip : string
     external_ip : string
     output_internal_ip : bool
-    wms_original_server : string
     wms_alternate_server : string
 
     Returns
@@ -156,14 +155,17 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
     add_data = []
     for thredds_dataset in threddsclient.crawl(thredds_server,depth=depth):
         wms_url = thredds_dataset.wms_url()
+        catalog_url = thredds_dataset.catalog.url
         # Change wms_url server if requested
         if wms_alternate_server is not None:
-            wms_url = wms_url.replace(wms_original_server,
-                                      wms_alternate_server,1)
+            post_catalogxml = catalog_url[catalog_url.find('catalog.xml?'):]
+            thredds_rel_path = post_catalogxml[post_catalogxml.find('/')+1:]
+            wms_url = wms_alternate_server.replace('<DATASET>',
+                                                   thredds_rel_path)
         urls = {'opendap_url':thredds_dataset.opendap_url(),
                 'download_url':thredds_dataset.download_url(),
                 'thredds_server':thredds_server,
-                'catalog_url':thredds_dataset.catalog.url,
+                'catalog_url':catalog_url,
                 'wms_url':wms_url}
         # Here, if opening the NetCDF file fails, we simply continue
         # to the next one. Perhaps a way to track the erroneous files
@@ -248,7 +250,7 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
                 ignored_variables=None,set_dataset_id=False,
                 overwrite_dataset_id=False,internal_ip=None,
                 external_ip=None,output_internal_ip=False,
-                wms_original_server=None,wms_alternate_server=None):
+                wms_alternate_server=None):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -276,7 +278,6 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
     internal_ip : string
     external_ip : string
     output_internal_ip : bool
-    wms_original_server : string
     wms_alternate_server : string
 
     Returns
@@ -303,7 +304,6 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
                                overwrite_dataset_id=overwrite_dataset_id,
                                internal_ip=internal_ip,external_ip=external_ip,
                                output_internal_ip=output_internal_ip,
-                               wms_original_server=wms_original_server,
                                wms_alternate_server=wms_alternate_server)
     return solr_update(solr_server,add_data)
 
