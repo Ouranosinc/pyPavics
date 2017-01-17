@@ -155,17 +155,16 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
     add_data = []
     for thredds_dataset in threddsclient.crawl(thredds_server,depth=depth):
         wms_url = thredds_dataset.wms_url()
-        catalog_url = thredds_dataset.catalog.url
         # Change wms_url server if requested
         if wms_alternate_server is not None:
-            post_catalogxml = catalog_url[catalog_url.find('catalog.xml?'):]
-            thredds_rel_path = post_catalogxml[post_catalogxml.find('/')+1:]
+            thredds_id = thredds_dataset.ID
+            thredds_rel_path = thredds_id[thredds_id.find('/')+1:]
             wms_url = wms_alternate_server.replace('<DATASET>',
                                                    thredds_rel_path)
         urls = {'opendap_url':thredds_dataset.opendap_url(),
                 'download_url':thredds_dataset.download_url(),
                 'thredds_server':thredds_server,
-                'catalog_url':catalog_url,
+                'catalog_url':thredds_dataset.catalog.url,
                 'wms_url':wms_url}
         # Here, if opening the NetCDF file fails, we simply continue
         # to the next one. Perhaps a way to track the erroneous files
