@@ -143,6 +143,27 @@ def time_vectors_to_datetimes(time_vectors):
         return datetimes,np.array(masked_datetimes),np.array(valid_datetimes)
 
 
+def get_dimensions(nc_resource, var_names=None):
+    if isinstance(var_names, basestring):
+        var_names = [var_names]
+    d = {}
+    if isinstance(nc_resource, basestring):
+        ncdataset = netCDF4.Dataset(nc_resource, 'r')
+    elif isinstance(nc_resource, netCDF4._netCDF4.Dataset):
+        ncdataset = nc_resource
+    elif isinstance(nc_resource, (list, set, tuple)):
+        ncdataset = netCDF4.Dataset(nc_resource[0], 'r')
+    else:
+        raise NotImplementedError()
+    if var_names:
+        for var_name in var_names:
+            ncvar = ncdataset.variables[var_name]
+            d.update({var_name: ncvar.dimensions})
+        return d
+    else:
+        return ncdataset.dimensions.keys()
+
+
 def validate_calendar(calendar):
     """Validate calendar string for CF Conventions.
 
@@ -226,7 +247,7 @@ def get_calendar(nc_resource):
     if hasattr(nc_resource,'calendar'):
         return validate_calendar(nc_resource.calendar)
     elif (hasattr(nc_resource,'variables') and
-          hasattr(nc_resource.variables,'has_key')):
+          hasattr(nc_resource.variables,'keys')):
         return _calendar_from_ncdataset(nc_resource)
     else:
         try:
@@ -235,6 +256,36 @@ def get_calendar(nc_resource):
             raise NetCDFError(("Unknown NetCDF "
                                "resource: %s") % (str(nc_resource),))
         return _calendar_from_ncdataset(nc)
+
+
+def _get_var_info(ncvar):
+    d = {'name': ncvar.name,
+         'units': getattr(ncvar, 'units', None),
+         'standard_name': getattr(ncvar, 'standard_name', None),
+         'long_name': getattr(ncvar, 'long_name', None),
+         'dtype': str(ncvar.dtype)}
+    for ncattr in ncvar.ncattrs():
+        if ncattr not in ['_FillValue', 'units', 'standard_name', 'long_name']:
+            d.update({ncattr: getattr(ncvar, ncattr)})
+    return d
+
+
+def _get_point_from_ncvar_and_ordered_indices(ncvar, indices):
+    d = {'name': ncvar.name,
+         'value': ncvar[tuple(indices)],
+         'units': getattr(ncvar, 'units', None),
+         'standard_name': getattr(ncvar, 'standard_name', None),
+         'long_name': getattr(ncvar, 'long_name', None),
+         'dtype': str(ncvar.dtype)}
+    for ncattr in ncvar.ncattrs():
+        if ncattr not in ['_FillValue', 'units', 'standard_name', 'long_name']:
+            d.update({ncattr: getattr(ncvar, ncattr)})
+    return d
+
+
+def _get_point_from_ncvar_and_named_indices(ncvar, named_indices):
+    indices = [named_indices[x] for x in ncvar.dimensions]
+    return _get_point_from_ncvar_and_ordered_indices(ncvar, indices)
 
 
 def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],
