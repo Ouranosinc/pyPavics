@@ -625,9 +625,9 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
                         time_calendar='gregorian',level_dtype='f4',
                         level_units='Pa',level_positive='up',
                         var_name='dummy',var_dtype='f4',data_scale_factor=1.0,
-                        data_add_offset=0.0,fill_mode='random',
+                        data_add_offset=0.0,fill_mode=None,
                         time_values=None,lon_values=None,lat_values=None,
-                        verbose=False):
+                        var_values=None,verbose=False):
     """
     Create a dummy NetCDF file on disk.
 
@@ -879,6 +879,26 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
             masked_values = 0
         data_size_mb = data1.nbytes/1000000.0
         var1[...] = ma.reshape(data1,var1.shape)
+    elif fill_mode == 'pairing':
+        data1 = np.zeros(var1.shape)
+        dim = -1
+        multiplier = 1
+        while dim >= -len(var1.shape):
+            elements = np.arange(0,var1.shape[dim])
+            tile_shape = list(var1.shape)
+            if dim != -1:
+                tile_shape[dim] = var1.shape[-1]
+            tile_shape[-1] = 1
+            tiled = np.tile(elements,(var1.shape))
+            if dim != -1:
+                add = np.swapaxes(tiled,len(var1.shape)+dim,len(var1.shape)-1)
+            data1 += add*multiplier
+            dim -= 1
+            multiplier *= 10**len(str(var1.shape[dim]))
+        var1[...] = data1
+
+    if var_values is not None:
+        var1[...] = var_values
 
     nc1.close()
 
