@@ -199,7 +199,10 @@ def nearest_time(nc_files, t, threshold=None):
             hh = 12
             mi = 0
             ss = 0
-        t = netCDF4.netcdftime.datetime(yyyy, mm, dd, hh, mi, ss)
+        try:
+            t = datetime.datetime(yyyy, mm, dd, hh, mi, ss)
+        except ValueError:
+            t = netCDF4.netcdftime.datetime(yyyy, mm, dd, hh, mi, ss)
 
     if isinstance(t, numbers.Number):
         return _nearest_time_from_netcdf_time_units(nc_files, t, threshold)
