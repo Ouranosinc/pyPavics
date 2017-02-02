@@ -192,9 +192,9 @@ def nearest_time(nc_files, t, threshold=None):
         dd = int(decode_date[2])
         if len(decode_t) > 1:
             decode_time = decode_t[1].split(':')
-            hh = decode_time[0]
-            mi = decode_time[1]
-            ss = decode_time[2]
+            hh = int(decode_time[0])
+            mi = int(decode_time[1])
+            ss = int(decode_time[2])
         else:
             hh = 12
             mi = 0
