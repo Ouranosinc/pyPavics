@@ -171,7 +171,14 @@ def get_point(nc_resource, var_names, ordered_indices=None, named_indices=None,
                 continue
             ncdimvar = ncdataset.variables[dim]
             dd = pavnc._get_var_info(ncdimvar)
-            dd['value'] = ncdimvar[named_indices[dim]]
+            my_value = ncdimvar[named_indices[dim]]
+            if isinstance(my_value, np.integer):
+                my_value = int(my_value)
+            elif isinstance(my_value, np.floating):
+                my_value = float(my_value)
+            elif isinstance(my_value, np.ndarray):
+                my_value = my_value.tolist()
+            dd['value'] = my_value
             d['_dimensions'][dim] = dd
         if ncdataset is not None:
             if ('lon' in ncdataset.variables) and \

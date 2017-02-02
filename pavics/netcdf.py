@@ -266,20 +266,39 @@ def _get_var_info(ncvar):
          'dtype': str(ncvar.dtype)}
     for ncattr in ncvar.ncattrs():
         if ncattr not in ['_FillValue', 'units', 'standard_name', 'long_name']:
-            d.update({ncattr: getattr(ncvar, ncattr)})
+            my_attr = getattr(ncvar, ncattr)
+            if isinstance(my_attr, np.integer):
+                my_attr = int(my_attr)
+            elif isinstance(my_attr, np.floating):
+                my_attr = float(my_attr)
+            elif isinstance(my_attr, np.ndarray):
+                my_attr = my_attr.tolist()
+            d.update({ncattr: my_attr})
     return d
 
 
 def _get_point_from_ncvar_and_ordered_indices(ncvar, indices):
+    my_value = ncvar[tuple(indices)]
+    if isinstance(my_value, (np.float32, np.float64)):
+        my_value = float(my_value)
+    elif isinstance(my_value, (np.int16, np.uint32)):
+        my_value = int(my_value)
     d = {'name': ncvar.name,
-         'value': ncvar[tuple(indices)],
+         'value': my_value,
          'units': getattr(ncvar, 'units', None),
          'standard_name': getattr(ncvar, 'standard_name', None),
          'long_name': getattr(ncvar, 'long_name', None),
          'dtype': str(ncvar.dtype)}
     for ncattr in ncvar.ncattrs():
         if ncattr not in ['_FillValue', 'units', 'standard_name', 'long_name']:
-            d.update({ncattr: getattr(ncvar, ncattr)})
+            my_attr = getattr(ncvar, ncattr)
+            if isinstance(my_attr, np.integer):
+                my_attr = int(my_attr)
+            elif isinstance(my_attr, np.floating):
+                my_attr = float(my_attr)
+            elif isinstance(my_attr, np.ndarray):
+                my_attr = my_attr.tolist()
+            d.update({ncattr: my_attr})
     return d
 
 
