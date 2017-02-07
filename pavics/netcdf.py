@@ -634,7 +634,8 @@ def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
         ncvar2[...] = ncvar1[...]
 
 
-def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
+def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
+                        global_attributes=None,use_time=True,
                         use_level=False,use_lat=True,use_lon=True,
                         use_station=False,use_ycxc=False,
                         time_size=None,time_num_values=1,level_size=1,
@@ -642,8 +643,10 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
                         xc_size=1,time_dtype='i2',
                         time_units='days since 2001-01-01 00:00:00',
                         time_calendar='gregorian',level_dtype='f4',
-                        level_units='Pa',level_positive='up',
-                        var_name='dummy',var_dtype='f4',data_scale_factor=1.0,
+                        level_units='Pa',level_positive='down',
+                        var_name='dummy',var_dtype='f4',var_units='1',
+                        var_standard_name='dummy_variable',
+                        data_scale_factor=1.0,
                         data_add_offset=0.0,fill_mode=None,
                         time_values=None,lon_values=None,lat_values=None,
                         var_values=None,verbose=False):
@@ -655,6 +658,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
     nc_file : str
         Name (and path) of the file to write.
     nc_format : str
+    global_attributes : dict
     use_time : bool
     use_level : bool
     use_lat : bool
@@ -677,6 +681,8 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
     level_positive : str
     var_name : str
     var_dtype : str
+    var_units : str
+    var_standard_name : str
     data_scale_factor : float
     data_add_offset : float
     fill_mode : str
@@ -719,6 +725,8 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
     # 2.6.2. Description of file contents
     nc1.title = 'Dummy NetCDF file'
     nc1.history = "%s: File creation." % (now,)
+    for (gattr, value) in global_attributes.items():
+        setattr(nc1, gattr, value)
 
     # Create netCDF dimensions
     if use_time:
@@ -874,11 +882,11 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',use_time=True,
                               chunksizes=None,
                               fill_value=netCDF4.default_fillvals[var_dtype])
     # 3.1. Units
-    var1.units = '1'
+    var1.units = var_units
     # 3.2. Long Name
-    var1.long_name = 'dummy_variable'
+    var1.long_name = var_standard_name
     # 3.3. Standard Name
-    var1.standard_name = 'dummy_variable'
+    var1.standard_name = var_standard_name
 
     if fill_mode == 'random':
         data1 = np.random.rand(*var1.shape)*data_scale_factor+data_add_offset

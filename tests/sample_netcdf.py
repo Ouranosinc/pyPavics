@@ -10,6 +10,76 @@ import numpy as np
 # [-#] for data in multiple files (optional)
 # e.g. sddrl01-1
 
+samples = {}
+
+samples['template'] = {
+    'nc_format':'NETCDF4_CLASSIC',
+    'global_attributes':{},
+    'use_time':True,
+    'use_level':False,
+    'use_lat':False,
+    'use_lon':False,
+    'use_station':False,
+    'use_ycxc':False,
+    'time_size':1,  # None for UNLIMITED, or same as time_num_values
+    'time_num_values':1,
+    'level_size':1,
+    'lat_size':1,
+    'lon_size':1,
+    'station_size':1,
+    'yc_size':1,
+    'xc_size':1,
+    'time_dtype':'i2',
+    'time_units':'days since 2001-01-01 00:00:00',
+    'time_calendar':'gregorian',
+    'level_dtype':'f4',
+    'level_units':'Pa',
+    'level_positive':'down',
+    'var_name':'dummy',
+    'var_dtype':'f4',
+    'var_units':'1',
+    'var_standard_name':'dummy_variable',
+    'data_scale_factor':1.0,  # Used in fill_mode, NOT a NetCDF scale_factor
+    'data_add_offset':0.0,  # Used in fill_mode, NOT a NetCDF add_offset
+    'fill_mode':None,  # 'random': [0,1), 'gradient' [0,1], 'pairing'
+    'time_values':None,
+    'lon_values':None,
+    'lat_values':None,
+    'var_values':0}
+
+samples['no_time_no_location'] = {
+    'nc_format':'NETCDF4_CLASSIC',
+    'use_time':False,
+    'use_level':False,
+    'use_lat':False,
+    'use_lon':False,
+    'use_station':False,
+    'use_ycxc':False,
+    'time_size':1,
+    'time_num_values':1,
+    'level_size':1,
+    'lat_size':1,
+    'lon_size':1,
+    'station_size':1,
+    'yc_size':1,
+    'xc_size':1,
+    'time_dtype':'i2',
+    'time_units':'days since 2001-01-01 00:00:00',
+    'time_calendar':'gregorian',
+    'level_dtype':'f4',
+    'level_units':'Pa',
+    'level_positive':'down',
+    'var_name':'dummy',
+    'var_dtype':'f4',
+    'data_scale_factor':1.0,
+    'data_add_offset':0.0,
+    'fill_mode':None,
+    'time_values':None,
+    'lon_values':None,
+    'lat_values':None,
+    'var_values':42}
+
+
 # One time, no location
 s000001 = {'nc_format':'NETCDF4_CLASSIC',
            'use_time':True,
