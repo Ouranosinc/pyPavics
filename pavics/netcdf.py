@@ -634,22 +634,22 @@ def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
         ncvar2[...] = ncvar1[...]
 
 
-def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
-                        global_attributes=None,use_time=True,
-                        use_level=False,use_lat=True,use_lon=True,
-                        use_station=False,use_ycxc=False,
-                        time_size=None,time_num_values=1,level_size=1,
-                        lat_size=1,lon_size=1,station_size=1,yc_size=1,
-                        xc_size=1,time_dtype='i2',
+def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
+                        global_attributes=None, use_time=True,
+                        use_level=False, use_lat=True, use_lon=True,
+                        use_station=False, use_ycxc=False,
+                        time_size=None, time_num_values=1, level_size=1,
+                        lat_size=1, lon_size=1, station_size=1, yc_size=1,
+                        xc_size=1, time_dtype='i2',
                         time_units='days since 2001-01-01 00:00:00',
-                        time_calendar='gregorian',level_dtype='f4',
-                        level_units='Pa',level_positive='down',
-                        var_name='dummy',var_dtype='f4',var_units='1',
-                        var_standard_name='dummy_variable',
+                        time_calendar='gregorian', level_dtype='f4',
+                        level_units='Pa', level_positive='down',
+                        var_name='dummy', var_dtype='f4', var_chunksizes=None,
+                        var_units='1', var_standard_name='dummy_variable',
                         data_scale_factor=1.0,
-                        data_add_offset=0.0,fill_mode=None,
-                        time_values=None,lon_values=None,lat_values=None,
-                        var_values=None,verbose=False):
+                        data_add_offset=0.0, fill_mode=None,
+                        time_values=None, lon_values=None, lat_values=None,
+                        var_values=None, verbose=False):
     """
     Create a dummy NetCDF file on disk.
 
@@ -667,6 +667,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
     use_ycxc : bool
     time_size : int or None
     time_num_values : int
+        Used if time_size is None and time_values are not provided.
     level_size : int
     lat_size : int
     lon_size : int
@@ -683,25 +684,35 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
     var_dtype : str
     var_units : str
     var_standard_name : str
+    var_chunksizes : tuple of int
     data_scale_factor : float
+        Used in fill_mode, NOT a NetCDF scale_factor.
     data_add_offset : float
+        Used in fill_mode, NOT a NetCDF add_offset.
     fill_mode : str
+        'random': [0,1), 'gradient' [0,1], 'pairing'
     time_values : numpy.ndarray
     lon_values : numpy.ndarray
     lat_values : numpy.ndarray
+    var_values : numpy.ndarray
     verbose : bool
 
     Notes
     -----
+    The 'pairing' fill_mode allows unique and easily predictable values that
+    are increasing along all axes in multiple dimensions based on the ndarray
+    indices. The value for indice (i1,i2,i3) is given by:
+    i3 + i2*10**(len(str(N3))) + i1*10**(len(str(N3))+len(str(N2)))
+    In words, starting from the last indice, we add its value plus a padding
+    of a power of 10 that is large enough to contain all previous values.
+
     Features that would make this more flexible in the future:
     1. insert_annual_cycle=True: fake an annual cycle in the data.
-    2. chunksizes
-    3. stations,yc,xc
-    4. missing values
-    5. consider rlat and rlon as dimensions
-    6. default level values, allow user defined level_values
-    7. allow user defined grids
-    8. create files larger than machine memory
+    2. allow multiple variables
+    3. missing values
+    4. consider rlat and rlon as dimensions
+    5. default level values, allow user defined level_values
+    6. create files larger than machine memory
 
     """
 
@@ -709,15 +720,15 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
     # http://cfconventions.org/
 
     # Aliases for default fill values
-    #defi2 = netCDF4.default_fillvals['i2']
-    #defi4 = netCDF4.default_fillvals['i4']
-    #deff4 = netCDF4.default_fillvals['f4']
+    # defi2 = netCDF4.default_fillvals['i2']
+    # defi4 = netCDF4.default_fillvals['i4']
+    # deff4 = netCDF4.default_fillvals['f4']
 
     # Create netCDF file
     # Valid formats are 'NETCDF4', 'NETCDF4_CLASSIC', 'NETCDF3_CLASSIC' and
     # 'NETCDF3_64BIT'
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    nc1 = netCDF4.Dataset(nc_file,'w',format=nc_format)
+    nc1 = netCDF4.Dataset(nc_file, 'w', format=nc_format)
 
     # 2.6.1 Identification of Conventions
     nc1.Conventions = 'CF-1.6'
@@ -730,18 +741,18 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
 
     # Create netCDF dimensions
     if use_time:
-        nc1.createDimension('time',time_size)
+        nc1.createDimension('time', time_size)
     if use_level:
-        nc1.createDimension('level',level_size)
+        nc1.createDimension('level', level_size)
     if use_lat:
-        nc1.createDimension('lat',lat_size)
+        nc1.createDimension('lat', lat_size)
     if use_lon:
-        nc1.createDimension('lon',lon_size)
+        nc1.createDimension('lon', lon_size)
     if use_station:
-        nc1.createDimension('station',station_size)
+        nc1.createDimension('station', station_size)
     if use_ycxc:
-        nc1.createDimension('yc',yc_size)
-        nc1.createDimension('xc',xc_size)
+        nc1.createDimension('yc', yc_size)
+        nc1.createDimension('xc', xc_size)
 
     # Create netCDF variables
     # Compression parameters include:
@@ -758,7 +769,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
 
     if use_time:
         # 4.4. Time Coordinate
-        time = nc1.createVariable('time',time_dtype,('time',),zlib=True)
+        time = nc1.createVariable('time', time_dtype, ('time',), zlib=True)
         time.axis = 'T'
         time.units = time_units
         time.long_name = 'time'
@@ -772,7 +783,7 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
 
     if use_level:
         # 4.3. Vertical (Height or Depth) Coordinate
-        level = nc1.createVariable('level',level_dtype,('level',),zlib=True)
+        level = nc1.createVariable('level', level_dtype, ('level',), zlib=True)
         level.axis = 'Z'
         level.units = level_units
         level.positive = level_positive
@@ -782,62 +793,62 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
 
     if use_lat:
         # 4.1. Latitude Coordinate
-        lat = nc1.createVariable('lat','f4',('lat',),zlib=True)
+        lat = nc1.createVariable('lat', 'f4', ('lat',), zlib=True)
         lat.axis = 'Y'
         lat.units = 'degrees_north'
         lat.long_name = 'latitude'
         lat.standard_name = 'latitude'
         if lat_values is None:
             dlat = 180.0/(lat_size+1)
-            lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+            lat[:] = np.arange(-90.0+dlat, 90.0-dlat/2.0, dlat)
         else:
             lat[:] = lat_values[:]
 
     if use_lon:
         # 4.2. Longitude Coordinate
-        lon = nc1.createVariable('lon','f4',('lon',),zlib=True)
+        lon = nc1.createVariable('lon', 'f4', ('lon',), zlib=True)
         lon.axis = 'X'
         lon.units = 'degrees_east'
         lon.long_name = 'longitude'
         lon.standard_name = 'longitude'
         if lon_values is None:
             dlon = 360.0/lon_size
-            lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+            lon[:] = np.arange(0.0, 360.0-dlon/2.0, dlon)
         else:
             lon[:] = lon_values[:]
 
     if use_station:
-        lat = nc1.createVariable('lat','f4',('station',),zlib=True)
+        lat = nc1.createVariable('lat', 'f4', ('station',), zlib=True)
         lat.axis = 'Y'
         lat.units = 'degrees_north'
         lat.long_name = 'latitude'
         lat.standard_name = 'latitude'
         if lat_values is None:
             dlat = 180.0/(lat_size+1)
-            lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+            lat[:] = np.arange(-90.0+dlat, 90.0-dlat/2.0, dlat)
         else:
             lat[:] = lat_values[:]
-        lon = nc1.createVariable('lon','f4',('station',),zlib=True)
+        lon = nc1.createVariable('lon', 'f4', ('station',), zlib=True)
         lon.axis = 'X'
         lon.units = 'degrees_east'
         lon.long_name = 'longitude'
         lon.standard_name = 'longitude'
         if lon_values is None:
             dlon = 360.0/lon_size
-            lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+            lon[:] = np.arange(0.0, 360.0-dlon/2.0, dlon)
         else:
             lon[:] = lon_values[:]
 
     if use_ycxc:
-        lat = nc1.createVariable('lat','f4',('yc','xc'),zlib=True)
+        lat = nc1.createVariable('lat', 'f4', ('yc','xc'), zlib=True)
         lat.axis = 'Y'
         lat.units = 'degrees_north'
         lat.long_name = 'latitude'
         lat.standard_name = 'latitude'
         if lat_values is None:
             raise NotImplementedError()
-            #dlat = 180.0/(lat_size+1)
-            #lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+            # dlat = 180.0/(lat_size+1)
+            # lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
         else:
             lat[:,:] = lat_values[:,:]
         lon = nc1.createVariable('lon','f4',('yc','xc'),zlib=True)
@@ -847,8 +858,8 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
         lon.standard_name = 'longitude'
         if lon_values is None:
             raise NotImplementedError()
-            #dlon = 360.0/lon_size
-            #lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+            # dlon = 360.0/lon_size
+            # lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
         else:
             lon[:,:] = lon_values[:,:]
 
@@ -878,8 +889,8 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
     if use_ycxc:
         var_dims.append('yc')
         var_dims.append('xc')
-    var1 = nc1.createVariable(var_name,var_dtype,tuple(var_dims),zlib=True,
-                              chunksizes=None,
+    var1 = nc1.createVariable(var_name, var_dtype, tuple(var_dims), zlib=True,
+                              chunksizes=var_chunksizes,
                               fill_value=netCDF4.default_fillvals[var_dtype])
     # 3.1. Units
     var1.units = var_units
@@ -890,24 +901,24 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
 
     if fill_mode == 'random':
         data1 = np.random.rand(*var1.shape)*data_scale_factor+data_add_offset
-        num_values = data1.size
-        if hasattr(data1,'count'):
-            masked_values = num_values-data1.count()
-        else:
-            masked_values = 0
-        data_size_mb = data1.nbytes/1000000.0
+        # num_values = data1.size
+        # if hasattr(data1,'count'):
+        #    masked_values = num_values-data1.count()
+        # else:
+        #    masked_values = 0
+        # data_size_mb = data1.nbytes/1000000.0
         var1[...] = data1[...]
     elif fill_mode == 'gradient':
-        data1 = np.arange(0,1.0+0.5/(var1.size-1),1.0/(var1.size-1))
+        data1 = np.arange(0, 1.0+0.5/(var1.size-1), 1.0/(var1.size-1))
         data1 = data1*data_scale_factor+data_add_offset
-        if hasattr(data1,'count'):
-            masked_values = num_values-data1.count()
-        else:
-            masked_values = 0
-        data_size_mb = data1.nbytes/1000000.0
-        var1[...] = ma.reshape(data1,var1.shape)
+        # if hasattr(data1,'count'):
+        #    masked_values = num_values-data1.count()
+        # else:
+        #    masked_values = 0
+        # data_size_mb = data1.nbytes/1000000.0
+        var1[...] = ma.reshape(data1, var1.shape)
     elif fill_mode == 'pairing':
-        data1 = np.zeros(var1.shape)
+        data1 = np.zeros(var1.shape, dtype=int)
         dim = -1
         multiplier = 1
         while dim >= -len(var1.shape):
@@ -916,22 +927,25 @@ def create_dummy_netcdf(nc_file,nc_format='NETCDF4_CLASSIC',
             if dim != -1:
                 tile_shape[dim] = var1.shape[-1]
             tile_shape[-1] = 1
-            tiled = np.tile(elements,(var1.shape))
+            tiled = np.tile(elements,(tile_shape))
             if dim != -1:
-                add = np.swapaxes(tiled,len(var1.shape)+dim,len(var1.shape)-1)
+                add = np.swapaxes(tiled, len(var1.shape)+dim,
+                                  len(var1.shape)-1)
+            else:
+                add = tiled
             data1 += add*multiplier
-            dim -= 1
             multiplier *= 10**len(str(var1.shape[dim]))
-        var1[...] = data1
+            dim -= 1
+        var1[...] = data1*data_scale_factor+data_add_offset
 
     if var_values is not None:
         var1[...] = var_values
 
     nc1.close()
 
-    if verbose:
-        str1 = "%s values, %s masked, for %s Mb of uncompressed data."
-        print(str1 % (str(num_values),str(masked_values),str(data_size_mb)))
+    # if verbose:
+    #    str1 = "%s values, %s masked, for %s Mb of uncompressed data."
+    #    print(str1 % (str(num_values),str(masked_values),str(data_size_mb)))
 
 
 def period2indices(initial_date,final_date,nc_file,calendar=None):
