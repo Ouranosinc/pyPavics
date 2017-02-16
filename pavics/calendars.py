@@ -7,11 +7,12 @@ Calendar definitions
 
 """
 
-gregorian_months = {1:'January',2:'February',3:'March',4:'April',5:'May',
-                    6:'June',7:'July',8:'August',9:'September',10:'October',
-                    11:'November',12:'December'}
+gregorian_months = {1: 'January', 2: 'February', 3: 'March', 4: 'April',
+                    5: 'May', 6: 'June', 7: 'July', 8: 'August',
+                    9: 'September', 10: 'October', 11: 'November',
+                    12: 'December'}
 
-temperate_seasons = {1:'Spring',2:'Summer',3:'Autumn',4:'Winter'}
+temperate_seasons = {1: 'Spring', 2: 'Summer', 3: 'Autumn', 4: 'Winter'}
 
 
 class CalendarError(Exception):
@@ -43,7 +44,7 @@ def months_of_gregorian_calendar(year=0):
 
     """
 
-    return list(range(1,13))
+    return list(range(1, 13))
 
 
 def temperate_seasons(year=0):
@@ -67,7 +68,7 @@ def temperate_seasons(year=0):
 
     """
 
-    return list(range(1,5))
+    return list(range(1, 5))
 
 
 def year_cycle(year=0):
@@ -99,7 +100,7 @@ def year_cycle(year=0):
 # Days in cycle #
 #################
 
-def days_in_month_360(month=0,year=0):
+def days_in_month_360(month=0, year=0):
     """Days of the month (360 days calendar).
 
     Parameters
@@ -122,10 +123,10 @@ def days_in_month_360(month=0,year=0):
 
     """
 
-    return list(range(1,31))
+    return list(range(1, 31))
 
 
-def days_in_month_365(month,year=0):
+def days_in_month_365(month, year=0):
     """Days of the month (365 days calendar).
 
     Parameters
@@ -148,11 +149,11 @@ def days_in_month_365(month,year=0):
 
     """
 
-    days_in_months = [31,28,31,30,31,30,31,31,30,31,30,31]
-    return list(range(1,days_in_months[month-1]+1))
+    days_in_months = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return list(range(1, days_in_months[month-1] + 1))
 
 
-def days_in_month_366(month,year=0):
+def days_in_month_366(month, year=0):
     """Days of the month (366 days calendar).
 
     Parameters
@@ -175,11 +176,11 @@ def days_in_month_366(month,year=0):
 
     """
 
-    days_in_months = [31,29,31,30,31,30,31,31,30,31,30,31]
-    return list(range(1,days_in_months[month-1]+1))
+    days_in_months = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return list(range(1, days_in_months[month-1] + 1))
 
 
-def days_in_month_julian(month,year):
+def days_in_month_julian(month, year):
     """Days of the month (Julian calendar).
 
     Parameters
@@ -202,12 +203,12 @@ def days_in_month_julian(month,year):
     """
 
     if (year % 4) == 0:
-        return days_in_month_366(month,year)
+        return days_in_month_366(month, year)
     else:
-        return days_in_month_365(month,year)
+        return days_in_month_365(month, year)
 
 
-def days_in_month_proleptic_gregorian(month,year):
+def days_in_month_proleptic_gregorian(month, year):
     """Days of the month (Proleptic gregorian calendar).
 
     Parameters
@@ -232,12 +233,12 @@ def days_in_month_proleptic_gregorian(month,year):
     """
 
     if ((year % 100) == 0) and ((year % 400) != 0):
-        return days_in_month_365(month,year)
+        return days_in_month_365(month, year)
     else:
-        return days_in_month_julian(month,year)
+        return days_in_month_julian(month, year)
 
 
-def days_in_month_gregorian(month,year):
+def days_in_month_gregorian(month, year):
     """Days of the month (Gregorian calendar).
 
     Parameters
@@ -263,14 +264,15 @@ def days_in_month_gregorian(month,year):
     """
 
     if (year > 1582) or ((year == 1582) and (month > 10)):
-        return days_in_month_proleptic_gregorian(month,year)
+        return days_in_month_proleptic_gregorian(month, year)
     elif (year == 1582) and (month == 10):
-        return [1,2,3,4,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]
+        return [1, 2, 3, 4, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+                28, 29, 30, 31]
     else:
-        return days_in_month_julian(month,year)
+        return days_in_month_julian(month, year)
 
 
-def days_in_year_365(cycle=0,year=0):
+def days_in_year_365(cycle=0, year=0):
     """Days of the year (365 days calendar).
 
     Parameters
@@ -292,10 +294,10 @@ def days_in_year_365(cycle=0,year=0):
 
     """
 
-    return list(range(1,366))
+    return list(range(1, 366))
 
 
-def day_in_year(cycle=0,year=0):
+def day_in_year(cycle=0, year=0):
     """Single day in a year.
 
     Parameters
@@ -325,7 +327,7 @@ def day_in_year(cycle=0,year=0):
 # Leap year check #
 ###################
 
-def is_leap_feb29(year,calendar):
+def is_leap_feb29(year, calendar):
     """Check for leap year (last day of February is the 29th).
 
     Parameters
@@ -344,7 +346,7 @@ def is_leap_feb29(year,calendar):
 
     """
 
-    days_in_cycle = calendar.days_in_cycle(2,year)
+    days_in_cycle = calendar.days_in_cycle(2, year)
     if days_in_cycle[-1] == 29:
         return True
     else:
@@ -360,7 +362,7 @@ class Calendar:
 
     """
 
-    def __init__(self,alias,cycles_in_year,days_in_cycle,fn_is_leap=None):
+    def __init__(self, alias, cycles_in_year, days_in_cycle, fn_is_leap=None):
         """Initialize calendar.
 
         Parameters
@@ -416,7 +418,7 @@ class Calendar:
             warp = (self.alias,)
             msg = "Leap year concept not defined for '%s' calendar." % warp
             raise CalendarError(msg)
-        if self.fn_is_leap(year,self):
+        if self.fn_is_leap(year, self):
             return True
         else:
             return False
@@ -452,7 +454,7 @@ class Calendar:
 
         """
 
-        return len(self.days_in_cycle(cycle,year))
+        return len(self.days_in_cycle(cycle, year))
 
     def count_days_in_year(self, year):
         """Count the number of days in a year.
@@ -471,30 +473,30 @@ class Calendar:
         year_cycles = self.cycles_in_year(year)
         days_in_year = 0
         for cycle in year_cycles:
-            days_in_year += len(self.days_in_cycle(cycle,year))
+            days_in_year += len(self.days_in_cycle(cycle, year))
         return days_in_year
 
 ######################
 # Built-in calendars #
 ######################
 
-Cal360 = Calendar('360_day',months_of_gregorian_calendar,days_in_month_360,
+Cal360 = Calendar('360_day', months_of_gregorian_calendar, days_in_month_360,
                   is_leap_feb29)
-Cal365 = Calendar('noleap',months_of_gregorian_calendar,days_in_month_365,
+Cal365 = Calendar('noleap', months_of_gregorian_calendar, days_in_month_365,
                   is_leap_feb29)
-Cal366 = Calendar('all_leap',months_of_gregorian_calendar,days_in_month_366,
+Cal366 = Calendar('all_leap', months_of_gregorian_calendar, days_in_month_366,
                   is_leap_feb29)
-CalJulian = Calendar('julian',months_of_gregorian_calendar,
-                     days_in_month_julian,is_leap_feb29)
-CalProleptic = Calendar('proleptic_gregorian',months_of_gregorian_calendar,
-                        days_in_month_proleptic_gregorian,is_leap_feb29)
-CalGregorian = Calendar('gregorian',months_of_gregorian_calendar,
-                        days_in_month_gregorian,is_leap_feb29)
-CalYearsOnly = Calendar('years_only',year_cycle,day_in_year,is_leap_feb29)
-CalMonthsOnly = Calendar('months_only',months_of_gregorian_calendar,
+CalJulian = Calendar('julian', months_of_gregorian_calendar,
+                     days_in_month_julian, is_leap_feb29)
+CalProleptic = Calendar('proleptic_gregorian', months_of_gregorian_calendar,
+                        days_in_month_proleptic_gregorian, is_leap_feb29)
+CalGregorian = Calendar('gregorian', months_of_gregorian_calendar,
+                        days_in_month_gregorian, is_leap_feb29)
+CalYearsOnly = Calendar('years_only', year_cycle, day_in_year, is_leap_feb29)
+CalMonthsOnly = Calendar('months_only', months_of_gregorian_calendar,
                          day_in_year)
-CalSeasons = Calendar('seasons',temperate_seasons,day_in_year)
-Cal365NoMonths = Calendar('365_days_no_months',year_cycle,days_in_year_365)
+CalSeasons = Calendar('seasons', temperate_seasons, day_in_year)
+Cal365NoMonths = Calendar('365_days_no_months', year_cycle, days_in_year_365)
 
 
 def calendar_from_alias(calendar_alias):
@@ -517,15 +519,15 @@ def calendar_from_alias(calendar_alias):
 
     if calendar_alias == '360_day':
         return Cal360
-    elif calendar_alias in ['noleap','365_day']:
+    elif calendar_alias in ['noleap', '365_day']:
         return Cal365
-    elif calendar_alias in ['all_leap','366_day']:
+    elif calendar_alias in ['all_leap', '366_day']:
         return Cal366
     elif calendar_alias == 'julian':
         return CalJulian
     elif calendar_alias == 'proleptic_gregorian':
         return CalProleptic
-    elif calendar_alias in ['gregorian','standard']:
+    elif calendar_alias in ['gregorian', 'standard']:
         return CalGregorian
     elif calendar_alias == 'years_only':
         return CalYearsOnly
