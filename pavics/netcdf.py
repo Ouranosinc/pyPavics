@@ -635,12 +635,13 @@ def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
 
 
 def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
-                        global_attributes=None, use_time=True,
+                        global_attributes=None, dimensions=None,
+                        variables=None, use_time=True,
                         use_level=False, use_lat=True, use_lon=True,
-                        use_station=False, use_ycxc=False,
+                        use_station=False, use_ycxc=False, use_rlatrlon=False,
                         time_size=None, time_num_values=1, level_size=1,
                         lat_size=1, lon_size=1, station_size=1, yc_size=1,
-                        xc_size=1, time_dtype='i2',
+                        xc_size=1, rlat_size=1, rlon_size=1, time_dtype='i2',
                         time_units='days since 2001-01-01 00:00:00',
                         time_calendar='gregorian', level_dtype='f4',
                         level_units='Pa', level_positive='down',
@@ -659,12 +660,18 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
         Name (and path) of the file to write.
     nc_format : str
     global_attributes : dict
+    dimensions : list of tuple
+        Tuples are (dimension_name, dimension_size).
+    variables : dict
+        Format is {'varname': {'create_args': {'dtype': 'f4'},
+                               'attributes': {'units': 1}}}
     use_time : bool
     use_level : bool
     use_lat : bool
     use_lon : bool
     use_station : bool
     use_ycxc : bool
+    use_rlatrlon : bool
     time_size : int or None
     time_num_values : int
         Used if time_size is None and time_values are not provided.
@@ -674,6 +681,8 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
     station_size : int
     yc_size : int
     xc_size : int
+    rlat_size : int
+    rlon_size : int
     time_dtype : str
     time_units : str
     time_calendar : str
@@ -709,10 +718,9 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
     Features that would make this more flexible in the future:
     1. insert_annual_cycle=True: fake an annual cycle in the data.
     2. allow multiple variables
-    3. missing values
-    4. consider rlat and rlon as dimensions
-    5. default level values, allow user defined level_values
-    6. create files larger than machine memory
+    3. add the yc/xc or rlat/rlon variables when the modes are activated
+    4. default level values, allow user defined level_values
+    5. create files larger than machine memory
 
     """
 
@@ -728,31 +736,21 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
     # Valid formats are 'NETCDF4', 'NETCDF4_CLASSIC', 'NETCDF3_CLASSIC' and
     # 'NETCDF3_64BIT'
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    nc1 = netCDF4.Dataset(nc_file, 'w', format=nc_format)
+    nc = netCDF4.Dataset(nc_file, 'w', format=nc_format)
 
     # 2.6.1 Identification of Conventions
-    nc1.Conventions = 'CF-1.6'
+    nc.Conventions = 'CF-1.6'
 
     # 2.6.2. Description of file contents
-    nc1.title = 'Dummy NetCDF file'
-    nc1.history = "%s: File creation." % (now,)
+    nc.title = 'Dummy NetCDF file'
+    nc.history = "{0}: File creation.".format(now)
     for (gattr, value) in global_attributes.items():
-        setattr(nc1, gattr, value)
+        setattr(nc, gattr, value)
 
     # Create netCDF dimensions
-    if use_time:
-        nc1.createDimension('time', time_size)
-    if use_level:
-        nc1.createDimension('level', level_size)
-    if use_lat:
-        nc1.createDimension('lat', lat_size)
-    if use_lon:
-        nc1.createDimension('lon', lon_size)
-    if use_station:
-        nc1.createDimension('station', station_size)
-    if use_ycxc:
-        nc1.createDimension('yc', yc_size)
-        nc1.createDimension('xc', xc_size)
+    if dimensions:
+        for dimension in dimensions:
+            nc.createDimension(*dimension)
 
     # Create netCDF variables
     # Compression parameters include:
@@ -767,176 +765,192 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
     #     (axes of the underlying grid structure of other variables defined on
     #     this dimension).
 
-    if use_time:
-        # 4.4. Time Coordinate
-        time = nc1.createVariable('time', time_dtype, ('time',), zlib=True)
-        time.axis = 'T'
-        time.units = time_units
-        time.long_name = 'time'
-        time.standard_name = 'time'
-        # 4.4.1. Calendar
-        time.calendar = time_calendar
-        if time_values is None:
-            time[:] = list(range(time_num_values))
-        else:
-            time[:] = time_values[:]
-
-    if use_level:
-        # 4.3. Vertical (Height or Depth) Coordinate
-        level = nc1.createVariable('level', level_dtype, ('level',), zlib=True)
-        level.axis = 'Z'
-        level.units = level_units
-        level.positive = level_positive
-        #level.long_name = 'air_pressure'
-        #level.standard_name = 'air_pressure'
-        raise NotImplementedError()  # need to fill level[:]
-
-    if use_lat:
-        # 4.1. Latitude Coordinate
-        lat = nc1.createVariable('lat', 'f4', ('lat',), zlib=True)
-        lat.axis = 'Y'
-        lat.units = 'degrees_north'
-        lat.long_name = 'latitude'
-        lat.standard_name = 'latitude'
-        if lat_values is None:
-            dlat = 180.0/(lat_size+1)
-            lat[:] = np.arange(-90.0+dlat, 90.0-dlat/2.0, dlat)
-        else:
-            lat[:] = lat_values[:]
-
-    if use_lon:
-        # 4.2. Longitude Coordinate
-        lon = nc1.createVariable('lon', 'f4', ('lon',), zlib=True)
-        lon.axis = 'X'
-        lon.units = 'degrees_east'
-        lon.long_name = 'longitude'
-        lon.standard_name = 'longitude'
-        if lon_values is None:
-            dlon = 360.0/lon_size
-            lon[:] = np.arange(0.0, 360.0-dlon/2.0, dlon)
-        else:
-            lon[:] = lon_values[:]
-
-    if use_station:
-        lat = nc1.createVariable('lat', 'f4', ('station',), zlib=True)
-        lat.axis = 'Y'
-        lat.units = 'degrees_north'
-        lat.long_name = 'latitude'
-        lat.standard_name = 'latitude'
-        if lat_values is None:
-            dlat = 180.0/(lat_size+1)
-            lat[:] = np.arange(-90.0+dlat, 90.0-dlat/2.0, dlat)
-        else:
-            lat[:] = lat_values[:]
-        lon = nc1.createVariable('lon', 'f4', ('station',), zlib=True)
-        lon.axis = 'X'
-        lon.units = 'degrees_east'
-        lon.long_name = 'longitude'
-        lon.standard_name = 'longitude'
-        if lon_values is None:
-            dlon = 360.0/lon_size
-            lon[:] = np.arange(0.0, 360.0-dlon/2.0, dlon)
-        else:
-            lon[:] = lon_values[:]
-
-    if use_ycxc:
-        lat = nc1.createVariable('lat', 'f4', ('yc','xc'), zlib=True)
-        lat.axis = 'Y'
-        lat.units = 'degrees_north'
-        lat.long_name = 'latitude'
-        lat.standard_name = 'latitude'
-        if lat_values is None:
-            raise NotImplementedError()
-            # dlat = 180.0/(lat_size+1)
-            # lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
-        else:
-            lat[:,:] = lat_values[:,:]
-        lon = nc1.createVariable('lon','f4',('yc','xc'),zlib=True)
-        lon.axis = 'X'
-        lon.units = 'degrees_east'
-        lon.long_name = 'longitude'
-        lon.standard_name = 'longitude'
-        if lon_values is None:
-            raise NotImplementedError()
-            # dlon = 360.0/lon_size
-            # lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
-        else:
-            lon[:,:] = lon_values[:,:]
-
-    # 2.3. Naming Conventions
-    # 2.4 Dimensions
-    #     If any or all of the dimensions of a variable have the
-    #     interpretations of "date or time" (T), "height or depth" (Z),
-    #     "latitude" (Y), or "longitude" (X) then we recommend, but do not
-    #     require, those dimensions to appear in the relative order T, then Z,
-    #     then Y, then X
-    # Chunksizes should be set to the expected input/output pattern and be of
-    # the order of 1000000 (that is the product of the chunksize in each
-    # dimention). e.g. for daily data, this might be 30 (a month) or
-    # 365 (a year) in time, and then determine the spatial chunks to obtain
-    # ~1000000.
-    var_dims = []
-    if use_time:
-        var_dims.append('time')
-    if use_level:
-        var_dims.append('level')
-    if use_lat:
-        var_dims.append('lat')
-    if use_lon:
-        var_dims.append('lon')
-    if use_station:
-        var_dims.append('station')
-    if use_ycxc:
-        var_dims.append('yc')
-        var_dims.append('xc')
-    var1 = nc1.createVariable(var_name, var_dtype, tuple(var_dims), zlib=True,
-                              chunksizes=var_chunksizes,
-                              fill_value=netCDF4.default_fillvals[var_dtype])
-    # 3.1. Units
-    var1.units = var_units
-    # 3.2. Long Name
-    var1.long_name = var_standard_name
-    # 3.3. Standard Name
-    var1.standard_name = var_standard_name
-
-    if fill_mode == 'random':
-        data1 = np.random.rand(*var1.shape)*data_scale_factor+data_add_offset
-        # num_values = data1.size
-        # if hasattr(data1,'count'):
-        #    masked_values = num_values-data1.count()
-        # else:
-        #    masked_values = 0
-        # data_size_mb = data1.nbytes/1000000.0
-        var1[...] = data1[...]
-    elif fill_mode == 'gradient':
-        data1 = np.arange(0, 1.0+0.5/(var1.size-1), 1.0/(var1.size-1))
-        data1 = data1*data_scale_factor+data_add_offset
-        # if hasattr(data1,'count'):
-        #    masked_values = num_values-data1.count()
-        # else:
-        #    masked_values = 0
-        # data_size_mb = data1.nbytes/1000000.0
-        var1[...] = ma.reshape(data1, var1.shape)
-    elif fill_mode == 'pairing':
-        data1 = np.zeros(var1.shape, dtype=int)
-        dim = -1
-        multiplier = 1
-        while dim >= -len(var1.shape):
-            elements = np.arange(0,var1.shape[dim])
-            tile_shape = list(var1.shape)
-            if dim != -1:
-                tile_shape[dim] = var1.shape[-1]
-            tile_shape[-1] = 1
-            tiled = np.tile(elements,(tile_shape))
-            if dim != -1:
-                add = np.swapaxes(tiled, len(var1.shape)+dim,
-                                  len(var1.shape)-1)
+    if variables:
+        if ('time' in nc.dimensions) and ('time' not in variables):
+            # 4.4. Time Coordinate
+            time = nc.createVariable('time', time_dtype, ('time',), zlib=True)
+            time.axis = 'T'
+            time.units = time_units
+            time.long_name = 'time'
+            time.standard_name = 'time'
+            # 4.4.1. Calendar
+            time.calendar = time_calendar
+            if time_values is None:
+                time[:] = list(range(time_num_values))
             else:
-                add = tiled
-            data1 += add*multiplier
-            multiplier *= 10**len(str(var1.shape[dim]))
-            dim -= 1
-        var1[...] = data1*data_scale_factor+data_add_offset
+                time[:] = time_values[:]
+    
+        # if use_level:
+        #    # 4.3. Vertical (Height or Depth) Coordinate
+        #    level = nc1.createVariable('level', level_dtype, ('level',),
+        #                               zlib=True)
+        #    level.axis = 'Z'
+        #    level.units = level_units
+        #    level.positive = level_positive
+        #    #level.long_name = 'air_pressure'
+        #    #level.standard_name = 'air_pressure'
+        #    raise NotImplementedError()  # need to fill level[:]
+    
+        if ('lat' in nc.dimensions) and ('lat' not in variables):
+            # 4.1. Latitude Coordinate
+            lat = nc.createVariable('lat', 'f4', ('lat',), zlib=True)
+            lat.axis = 'Y'
+            lat.units = 'degrees_north'
+            lat.long_name = 'latitude'
+            lat.standard_name = 'latitude'
+            if lat_values is None:
+                dlat = 180.0/(lat_size+1)
+                lat[:] = np.arange(-90.0+dlat, 90.0-dlat/2.0, dlat)
+            else:
+                lat[:] = lat_values[:]
+    
+        if ('lon' in nc.dimensions) and ('lon' not in variables):
+            # 4.2. Longitude Coordinate
+            lon = nc.createVariable('lon', 'f4', ('lon',), zlib=True)
+            lon.axis = 'X'
+            lon.units = 'degrees_east'
+            lon.long_name = 'longitude'
+            lon.standard_name = 'longitude'
+            if lon_values is None:
+                dlon = 360.0/lon_size
+                lon[:] = np.arange(0.0, 360.0-dlon/2.0, dlon)
+            else:
+                lon[:] = lon_values[:]
+    
+        if ('station' in nc.dimensions) and ('station' not in variables):
+            lat = nc.createVariable('lat', 'f4', ('station',), zlib=True)
+            lat.axis = 'Y'
+            lat.units = 'degrees_north'
+            lat.long_name = 'latitude'
+            lat.standard_name = 'latitude'
+            if lat_values is None:
+                dlat = 180.0/(lat_size+1)
+                lat[:] = np.arange(-90.0+dlat, 90.0-dlat/2.0, dlat)
+            else:
+                lat[:] = lat_values[:]
+            lon = nc.createVariable('lon', 'f4', ('station',), zlib=True)
+            lon.axis = 'X'
+            lon.units = 'degrees_east'
+            lon.long_name = 'longitude'
+            lon.standard_name = 'longitude'
+            if lon_values is None:
+                dlon = 360.0/lon_size
+                lon[:] = np.arange(0.0, 360.0-dlon/2.0, dlon)
+            else:
+                lon[:] = lon_values[:]
+    
+        if ('yc' in nc.dimensions) and ('yc' not in variables):
+            lat = nc1.createVariable('lat', 'f4', ('yc','xc'), zlib=True)
+            lat.axis = 'Y'
+            lat.units = 'degrees_north'
+            lat.long_name = 'latitude'
+            lat.standard_name = 'latitude'
+            if lat_values is None:
+                raise NotImplementedError()
+                # dlat = 180.0/(lat_size+1)
+                # lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+            else:
+                lat[:,:] = lat_values[:,:]
+            lon = nc.createVariable('lon', 'f4', ('yc', 'xc'), zlib=True)
+            lon.axis = 'X'
+            lon.units = 'degrees_east'
+            lon.long_name = 'longitude'
+            lon.standard_name = 'longitude'
+            if lon_values is None:
+                raise NotImplementedError()
+                # dlon = 360.0/lon_size
+                # lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+            else:
+                lon[:,:] = lon_values[:,:]
+    
+        if ('rlat' in nc.dimensions) and ('rlon' not in variables):
+            lat = nc.createVariable('lat', 'f4', ('rlat','rlon'), zlib=True)
+            lat.axis = 'Y'
+            lat.units = 'degrees_north'
+            lat.long_name = 'latitude'
+            lat.standard_name = 'latitude'
+            if lat_values is None:
+                raise NotImplementedError()
+                # dlat = 180.0/(lat_size+1)
+                # lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
+            else:
+                lat[:,:] = lat_values[:,:]
+            lon = nc.createVariable('lon', 'f4', ('rlat', 'rlon'), zlib=True)
+            lon.axis = 'X'
+            lon.units = 'degrees_east'
+            lon.long_name = 'longitude'
+            lon.standard_name = 'longitude'
+            if lon_values is None:
+                raise NotImplementedError()
+                # dlon = 360.0/lon_size
+                # lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
+            else:
+                lon[:,:] = lon_values[:,:]
+    
+        # 2.3. Naming Conventions
+        # 2.4 Dimensions
+        #     If any or all of the dimensions of a variable have the
+        #     interpretations of "date or time" (T), "height or depth" (Z),
+        #     "latitude" (Y), or "longitude" (X) then we recommend, but do not
+        #     require, those dimensions to appear in the relative order T, then Z,
+        #     then Y, then X
+        # Chunksizes should be set to the expected input/output pattern and be of
+        # the order of 1000000 (that is the product of the chunksize in each
+        # dimention). e.g. for daily data, this might be 30 (a month) or
+        # 365 (a year) in time, and then determine the spatial chunks to obtain
+        # ~1000000.
+        for (var_name, var_args) in variables.items():
+            ncvar = nc.createVariable(var_name, *var_args['create_args'])
+            if 'attributes' in var_args:
+                for (var_attr, attr_value) in var_args['attributes'].items():
+                    setattr(ncvar, var_attr, attr_value)
+
+        # 3.1. Units
+        # var1.units = var_units
+        # 3.2. Long Name
+        # var1.long_name = var_standard_name
+        # 3.3. Standard Name
+        # var1.standard_name = var_standard_name
+    
+            if 'fill_mode' in var_args and var_args['fill_mode'] == 'random':
+                data1 = np.random.rand(*var1.shape)*data_scale_factor +\
+                    data_add_offset
+                # num_values = data1.size
+                # if hasattr(data1,'count'):
+                #    masked_values = num_values-data1.count()
+                # else:
+                #    masked_values = 0
+                # data_size_mb = data1.nbytes/1000000.0
+                var1[...] = data1[...]
+            elif fill_mode == 'gradient':
+                data1 = np.arange(0, 1.0+0.5/(var1.size-1), 1.0/(var1.size-1))
+                data1 = data1*data_scale_factor+data_add_offset
+                # if hasattr(data1,'count'):
+                #    masked_values = num_values-data1.count()
+                # else:
+                #    masked_values = 0
+                # data_size_mb = data1.nbytes/1000000.0
+                var1[...] = ma.reshape(data1, var1.shape)
+            elif fill_mode == 'pairing':
+                data1 = np.zeros(var1.shape, dtype=int)
+                dim = -1
+                multiplier = 1
+                while dim >= -len(var1.shape):
+                    elements = np.arange(0, var1.shape[dim])
+                    tile_shape = list(var1.shape)
+                    if dim != -1:
+                        tile_shape[dim] = var1.shape[-1]
+                    tile_shape[-1] = 1
+                    tiled = np.tile(elements, (tile_shape))
+                    if dim != -1:
+                        add = np.swapaxes(tiled, len(var1.shape)+dim,
+                                          len(var1.shape)-1)
+                    else:
+                        add = tiled
+                    data1 += add*multiplier
+                    multiplier *= 10**len(str(var1.shape[dim]))
+                    dim -= 1
+                var1[...] = data1*data_scale_factor+data_add_offset
 
     if var_values is not None:
         var1[...] = var_values
