@@ -55,11 +55,11 @@ def datetimes_to_time_vectors(datetimes):
 
     def datetime_timetuple(one_datetime):
         if one_datetime is None:
-            return ma.masked_all([6],dtype='int32')
+            return ma.masked_all([6], dtype='int32')
         return one_datetime.timetuple()[0:6]
 
     try:
-        time_tuples = list(map(datetime_timetuple,datetimes))
+        time_tuples = list(map(datetime_timetuple, datetimes))
         return ma.array(time_tuples)
     except (AttributeError, TypeError):
         time_tuple = datetimes.timetuple()
@@ -86,11 +86,11 @@ def time_vectors_to_datetimes(time_vectors):
     masked_datetimes = []
     valid_datetimes = []
     if len(time_vectors.shape) == 1:
-        full_vector = ma.masked_all([7],dtype='int32')
+        full_vector = ma.masked_all([7], dtype='int32')
         for s in range(time_vectors.shape[0]):
             full_vector[s] = time_vectors[s]
-        for s in range(time_vectors.shape[0],7):
-            if s in [1,2]:
+        for s in range(time_vectors.shape[0], 7):
+            if s in [1, 2]:
                 full_vector[s] = 1
             else:
                 full_vector[s] = 0
@@ -105,17 +105,17 @@ def time_vectors_to_datetimes(time_vectors):
             try:
                 ndatetime = netCDF4.netcdftime.datetime(*full_vector)
                 ndatetime.strftime()
-            except (ma.MaskError,ValueError):
+            except (ma.MaskError, ValueError):
                 masked_datetimes.append(0)
             else:
                 ncdatetimes.append(ndatetime)
                 valid_datetimes.append(0)
     else:
         for i in range(time_vectors.shape[0]):
-            full_vector = ma.masked_all([7],dtype='int32')
+            full_vector = ma.masked_all([7], dtype='int32')
             for s in range(time_vectors.shape[1]):
                 full_vector[s] = time_vectors[i,s]
-            for s in range(time_vectors.shape[1],7):
+            for s in range(time_vectors.shape[1], 7):
                 if s in [1,2]:
                     full_vector[s] = 1
                 else:
@@ -123,7 +123,7 @@ def time_vectors_to_datetimes(time_vectors):
             try:
                 ndatetime = netCDF4.netcdftime.datetime(*full_vector)
                 ndatetime.strftime()
-            except (ma.MaskError,ValueError):
+            except (ma.MaskError, ValueError):
                 masked_datetimes.append(i)
             else:
                 ncdatetimes.append(ndatetime)
@@ -138,9 +138,11 @@ def time_vectors_to_datetimes(time_vectors):
                 else:
                     datetimes.append(one_datetime)
     if irregular_calendar:
-        return ncdatetimes,np.array(masked_datetimes),np.array(valid_datetimes)
+        return (ncdatetimes, np.array(masked_datetimes),
+                np.array(valid_datetimes))
     else:
-        return datetimes,np.array(masked_datetimes),np.array(valid_datetimes)
+        return (datetimes, np.array(masked_datetimes),
+                np.array(valid_datetimes))
 
 
 def get_dimensions(nc_resource, var_names=None):
@@ -184,8 +186,8 @@ def validate_calendar(calendar):
 
     """
 
-    if calendar in ['gregorian','standard','proleptic_gregorian','noleap',
-                    '365_day','all_leap','366_day','360_day','julian']:
+    if calendar in ['gregorian', 'standard', 'proleptic_gregorian', 'noleap',
+                    '365_day', 'all_leap', '366_day', '360_day', 'julian']:
         return calendar
     elif calendar == 'none':
         raise NotImplementedError("calendar is set to 'none'")
@@ -215,7 +217,7 @@ def _calendar_from_ncdataset(ncdataset):
     """
 
     if 'time' in ncdataset.variables:
-        if hasattr(ncdataset.variables['time'],'calendar'):
+        if hasattr(ncdataset.variables['time'], 'calendar'):
             return validate_calendar(ncdataset.variables['time'].calendar)
         else:
             return 'gregorian'
@@ -244,14 +246,14 @@ def get_calendar(nc_resource):
 
     """
 
-    if hasattr(nc_resource,'calendar'):
+    if hasattr(nc_resource, 'calendar'):
         return validate_calendar(nc_resource.calendar)
-    elif (hasattr(nc_resource,'variables') and
-          hasattr(nc_resource.variables,'keys')):
+    elif (hasattr(nc_resource, 'variables') and
+          hasattr(nc_resource.variables, 'keys')):
         return _calendar_from_ncdataset(nc_resource)
     else:
         try:
-            nc = netCDF4.Dataset(nc_resource,'r')
+            nc = netCDF4.Dataset(nc_resource, 'r')
         except:
             raise NetCDFError(("Unknown NetCDF "
                                "resource: %s") % (str(nc_resource),))
@@ -307,8 +309,8 @@ def _get_point_from_ncvar_and_named_indices(ncvar, named_indices):
     return _get_point_from_ncvar_and_ordered_indices(ncvar, indices)
 
 
-def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],
-                  renames=None,defaults=None,appends=None):
+def nc_copy_attrs(nc_source, nc_destination, includes=[], excludes=[],
+                  renames=None, defaults=None, appends=None):
     """Copy attributes from source file to destination file.
 
     Parameters
@@ -354,42 +356,42 @@ def nc_copy_attrs(nc_source,nc_destination,includes=[],excludes=[],
                 renames[attribute] = attribute
             if renames[attribute] == '_FillValue':
                 continue
-            copy_attr = getattr(nc_source,attribute)
+            copy_attr = getattr(nc_source, attribute)
             # hack for bypassing unicode bug
             try:
                 copy_attr = copy_attr.encode('latin-1')
-            except (AttributeError,UnicodeEncodeError):
+            except (AttributeError, UnicodeEncodeError):
                 pass
-            nc_destination.__setattr__(renames[attribute],copy_attr)
+            nc_destination.__setattr__(renames[attribute], copy_attr)
     for attribute in defaults:
-        if not hasattr(nc_destination,attribute):
+        if not hasattr(nc_destination, attribute):
             # hack for bypassing unicode bug
             try:
                 default_attr = defaults[attribute].encode('latin-1')
-            except (AttributeError,UnicodeEncodeError):
+            except (AttributeError, UnicodeEncodeError):
                 default_attr = defaults[attribute]
-            nc_destination.__setattr__(attribute,default_attr)
+            nc_destination.__setattr__(attribute, default_attr)
     for attribute in appends:
-        if hasattr(nc_destination,attribute):
-            warp = getattr(nc_destination,attribute)
+        if hasattr(nc_destination, attribute):
+            warp = getattr(nc_destination, attribute)
             # hack for bypassing unicode bug
             try:
                 append_attr = appends[attribute].encode('latin-1')
-            except (AttributeError,UnicodeEncodeError):
+            except (AttributeError, UnicodeEncodeError):
                 append_attr = appends[attribute]
             new_attr = warp + '\n' + append_attr
-            nc_destination.__setattr__(attribute,new_attr)
+            nc_destination.__setattr__(attribute, new_attr)
         else:
             # hack for bypassing unicode bug
             try:
                 append_attr = appends[attribute].encode('latin-1')
-            except (AttributeError,UnicodeEncodeError):
+            except (AttributeError, UnicodeEncodeError):
                 append_attr = appends[attribute]
-            nc_destination.__setattr__(attribute,append_attr)
+            nc_destination.__setattr__(attribute, append_attr)
 
 
-def nc_copy_dimensions(nc_source,nc_destination,includes=[],excludes=[],
-                       renames=None,defaults=None,reshapes=None):
+def nc_copy_dimensions(nc_source, nc_destination, includes=[], excludes=[],
+                       renames=None, defaults=None, reshapes=None):
     """Copy NetCDF dimensions.
 
     Parameters
@@ -441,12 +443,12 @@ def nc_copy_dimensions(nc_source,nc_destination,includes=[],excludes=[],
                                            reshapes[renames[dim_src]])
     for dim in defaults:
         if dim not in nc_destination.dimensions:
-            nc_destination.createDimension(dim,defaults[dim])
+            nc_destination.createDimension(dim, defaults[dim])
 
 
-def nc_copy_variables_structure(nc_source,nc_destination,includes=[],
-                                excludes=[],renames=None,new_dtype=None,
-                                new_dimensions=None,create_args=None):
+def nc_copy_variables_structure(nc_source, nc_destination, includes=[],
+                                excludes=[], renames=None, new_dtype=None,
+                                new_dimensions=None, create_args=None):
     """Copy structure of multiple NetCDF variables.
 
     Parameters
@@ -496,7 +498,7 @@ def nc_copy_variables_structure(nc_source,nc_destination,includes=[],
                     if key not in create_args[var_src]:
                         create_args[var_src][key] = create_args['_global'][key]
             warp = 'fill_value' not in create_args[var_src]
-            if hasattr(ncvar1,'_FillValue') and warp:
+            if hasattr(ncvar1, '_FillValue') and warp:
                 create_args[var_src]['fill_value'] = ncvar1._FillValue
             if 'chunksizes' not in create_args[var_src]:
                 # If dimensions size have changed it is not safe to copy
@@ -509,19 +511,19 @@ def nc_copy_variables_structure(nc_source,nc_destination,includes=[],
                 else:
                     if ncvar1.chunking() == 'contiguous':
                         # This does not seem to work, why?
-                        #create_args[var_src]['contiguous'] = True
+                        # create_args[var_src]['contiguous'] = True
                         pass
                     else:
                         create_args[var_src]['chunksizes'] = ncvar1.chunking()
-            nc_destination.createVariable(renames[var_src],new_dtype[var_src],
+            nc_destination.createVariable(renames[var_src], new_dtype[var_src],
                                           new_dimensions[var_src],
                                           **create_args[var_src])
 
 
-def nc_copy_variables_attributes(nc_source,nc_destination,includes=[],
-                                 excludes=[],renames=None,attr_includes=None,
-                                 attr_excludes=None,attr_renames=None,
-                                 attr_defaults=None,attr_appends=None):
+def nc_copy_variables_attributes(nc_source, nc_destination, includes=[],
+                                 excludes=[], renames=None, attr_includes=None,
+                                 attr_excludes=None, attr_renames=None,
+                                 attr_defaults=None, attr_appends=None):
     """Copy NetCDF variables attributes.
 
     Parameters
@@ -585,13 +587,13 @@ def nc_copy_variables_attributes(nc_source,nc_destination,includes=[],
             attr_defaults[var_src] = {}
         if var_src not in attr_appends:
             attr_appends[var_src] = {}
-        nc_copy_attrs(ncvar1,ncvar2,attr_includes[var_src],
-                      attr_excludes[var_src],attr_renames[var_src],
-                      attr_defaults[var_src],attr_appends[var_src])
+        nc_copy_attrs(ncvar1, ncvar2, attr_includes[var_src],
+                      attr_excludes[var_src], attr_renames[var_src],
+                      attr_defaults[var_src], attr_appends[var_src])
 
 
-def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
-                           renames=None,source_slices=None,
+def nc_copy_variables_data(nc_source, nc_destination, includes=[], excludes=[],
+                           renames=None, source_slices=None,
                            destination_slices=None):
     """Copy NetCDF variables data.
 
@@ -634,23 +636,45 @@ def nc_copy_variables_data(nc_source,nc_destination,includes=[],excludes=[],
         ncvar2[...] = ncvar1[...]
 
 
+def _default_fill_data(var_shape, fill_mode, data_scale_factor,
+                       data_add_offset, **kwags):
+    if fill_mode == 'random':
+        return np.random.rand(*var_shape)*data_scale_factor + data_add_offset
+    elif fill_mode == 'gradient':
+        var_size = int(np.prod(var_shape))
+        fill_data = np.arange(0, 1.0 + 0.5/(var_size-1), 1.0/(var_size-1))
+        fill_data = fill_data*data_scale_factor + data_add_offset
+        return np.reshape(fill_data, var_shape)
+    elif fill_mode == 'pairing':
+        fill_data = np.zeros(var_shape, dtype=int)
+        dim = -1
+        multiplier = 1
+        while dim >= -len(var_shape):
+            elements = np.arange(0, var_shape[dim])
+            tile_shape = list(var_shape)
+            if dim != -1:
+                tile_shape[dim] = var_shape[-1]
+            tile_shape[-1] = 1
+            tiled = np.tile(elements, (tile_shape))
+            if dim != -1:
+                add = np.swapaxes(tiled, len(var_shape) + dim,
+                                  len(var_shape) - 1)
+            else:
+                add = tiled
+            fill_data += add*multiplier
+            multiplier *= 10**len(str(var_shape[dim]))
+            dim -= 1
+        return fill_data*data_scale_factor + data_add_offset
+
+
 def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
                         global_attributes=None, dimensions=None,
-                        variables=None, use_time=True,
-                        use_level=False, use_lat=True, use_lon=True,
-                        use_station=False, use_ycxc=False, use_rlatrlon=False,
-                        time_size=None, time_num_values=1, level_size=1,
-                        lat_size=1, lon_size=1, station_size=1, yc_size=1,
-                        xc_size=1, rlat_size=1, rlon_size=1, time_dtype='i2',
+                        variables=None, time_num_values=1, time_dtype='f4',
                         time_units='days since 2001-01-01 00:00:00',
                         time_calendar='gregorian', level_dtype='f4',
                         level_units='Pa', level_positive='down',
-                        var_name='dummy', var_dtype='f4', var_chunksizes=None,
-                        var_units='1', var_standard_name='dummy_variable',
-                        data_scale_factor=1.0,
-                        data_add_offset=0.0, fill_mode=None,
-                        time_values=None, lon_values=None, lat_values=None,
-                        var_values=None, verbose=False):
+                        level_name='height', time_values=None,
+                        level_values=None, lon_values=None, lat_values=None):
     """
     Create a dummy NetCDF file on disk.
 
@@ -664,50 +688,29 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
         Tuples are (dimension_name, dimension_size).
     variables : dict
         Format is {'varname': {'create_args': {'dtype': 'f4'},
-                               'attributes': {'units': 1}}}
-    use_time : bool
-    use_level : bool
-    use_lat : bool
-    use_lon : bool
-    use_station : bool
-    use_ycxc : bool
-    use_rlatrlon : bool
-    time_size : int or None
+                               'attributes': {'units': 1},
+                               'fill_mode': 'random',
+                               'values': None,
+                               'data_scale_factor': 1.0,
+                               'data_add_offset': 0.0}}
     time_num_values : int
-        Used if time_size is None and time_values are not provided.
-    level_size : int
-    lat_size : int
-    lon_size : int
-    station_size : int
-    yc_size : int
-    xc_size : int
-    rlat_size : int
-    rlon_size : int
+        Used for default filling of unlimited time dimension.
     time_dtype : str
     time_units : str
     time_calendar : str
     level_dtype : str
     level_units : str
     level_positive : str
-    var_name : str
-    var_dtype : str
-    var_units : str
-    var_standard_name : str
-    var_chunksizes : tuple of int
-    data_scale_factor : float
-        Used in fill_mode, NOT a NetCDF scale_factor.
-    data_add_offset : float
-        Used in fill_mode, NOT a NetCDF add_offset.
-    fill_mode : str
-        'random': [0,1), 'gradient' [0,1], 'pairing'
+    level_name : str
     time_values : numpy.ndarray
+    level_values : numpy.ndarray
     lon_values : numpy.ndarray
     lat_values : numpy.ndarray
-    var_values : numpy.ndarray
-    verbose : bool
 
     Notes
     -----
+    The 'random' fill_mode uses [0,1).
+    The 'gradient' fill_mode uses [0,1].
     The 'pairing' fill_mode allows unique and easily predictable values that
     are increasing along all axes in multiple dimensions based on the ndarray
     indices. The value for indice (i1,i2,i3) is given by:
@@ -715,12 +718,13 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
     In words, starting from the last indice, we add its value plus a padding
     of a power of 10 that is large enough to contain all previous values.
 
+    The data_scale_factor and data_add_offset are used in fill_mode, they
+    are NOT traditional NetCDF scale_factor and add_offset arguments.
+
     Features that would make this more flexible in the future:
     1. insert_annual_cycle=True: fake an annual cycle in the data.
-    2. allow multiple variables
-    3. add the yc/xc or rlat/rlon variables when the modes are activated
-    4. default level values, allow user defined level_values
-    5. create files larger than machine memory
+    2. add the yc/xc or rlat/rlon variables when the modes are activated
+    3. create files larger than machine memory
 
     """
 
@@ -769,133 +773,119 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
         if ('time' in nc.dimensions) and ('time' not in variables):
             # 4.4. Time Coordinate
             time = nc.createVariable('time', time_dtype, ('time',), zlib=True)
-            time.axis = 'T'
             time.units = time_units
             time.long_name = 'time'
             time.standard_name = 'time'
             # 4.4.1. Calendar
-            time.calendar = time_calendar
+            if time_calendar:
+                time.calendar = time_calendar
             if time_values is None:
                 time[:] = list(range(time_num_values))
             else:
                 time[:] = time_values[:]
-    
-        # if use_level:
-        #    # 4.3. Vertical (Height or Depth) Coordinate
-        #    level = nc1.createVariable('level', level_dtype, ('level',),
-        #                               zlib=True)
-        #    level.axis = 'Z'
-        #    level.units = level_units
-        #    level.positive = level_positive
-        #    #level.long_name = 'air_pressure'
-        #    #level.standard_name = 'air_pressure'
-        #    raise NotImplementedError()  # need to fill level[:]
-    
+
+        if ('level' in nc.dimensions) and ('level' not in variables):
+            # 4.3. Vertical (Height or Depth) Coordinate
+            level = nc.createVariable('level', level_dtype, ('level',),
+                                      zlib=True)
+            level.units = level_units
+            level.positive = level_positive
+            level.long_name = 'air_pressure'
+            level.standard_name = 'air_pressure'
+            if level_values is None:
+                raise NotImplementedError()
+            else:
+                level[:] = level_values[:]
+
         if ('lat' in nc.dimensions) and ('lat' not in variables):
             # 4.1. Latitude Coordinate
             lat = nc.createVariable('lat', 'f4', ('lat',), zlib=True)
-            lat.axis = 'Y'
             lat.units = 'degrees_north'
             lat.long_name = 'latitude'
             lat.standard_name = 'latitude'
             if lat_values is None:
-                dlat = 180.0/(lat_size+1)
-                lat[:] = np.arange(-90.0+dlat, 90.0-dlat/2.0, dlat)
+                dlat = 180.0/(lat.size+1)
+                lat[:] = np.arange(-90.0 + dlat, 90.0 - dlat/2.0, dlat)
             else:
                 lat[:] = lat_values[:]
-    
+
         if ('lon' in nc.dimensions) and ('lon' not in variables):
             # 4.2. Longitude Coordinate
             lon = nc.createVariable('lon', 'f4', ('lon',), zlib=True)
-            lon.axis = 'X'
             lon.units = 'degrees_east'
             lon.long_name = 'longitude'
             lon.standard_name = 'longitude'
             if lon_values is None:
-                dlon = 360.0/lon_size
-                lon[:] = np.arange(0.0, 360.0-dlon/2.0, dlon)
+                dlon = 360.0/lon.size
+                lon[:] = np.arange(0.0, 360.0 - dlon/2.0, dlon)
             else:
                 lon[:] = lon_values[:]
-    
+
         if ('station' in nc.dimensions) and ('station' not in variables):
             lat = nc.createVariable('lat', 'f4', ('station',), zlib=True)
-            lat.axis = 'Y'
             lat.units = 'degrees_north'
             lat.long_name = 'latitude'
             lat.standard_name = 'latitude'
             if lat_values is None:
-                dlat = 180.0/(lat_size+1)
-                lat[:] = np.arange(-90.0+dlat, 90.0-dlat/2.0, dlat)
+                dlat = 180.0/(lat.size+1)
+                lat[:] = np.arange(-90.0 + dlat, 90.0 - dlat/2.0, dlat)
             else:
                 lat[:] = lat_values[:]
             lon = nc.createVariable('lon', 'f4', ('station',), zlib=True)
-            lon.axis = 'X'
             lon.units = 'degrees_east'
             lon.long_name = 'longitude'
             lon.standard_name = 'longitude'
             if lon_values is None:
-                dlon = 360.0/lon_size
-                lon[:] = np.arange(0.0, 360.0-dlon/2.0, dlon)
+                dlon = 360.0/lon.size
+                lon[:] = np.arange(0.0, 360.0 - dlon/2.0, dlon)
             else:
                 lon[:] = lon_values[:]
-    
+
         if ('yc' in nc.dimensions) and ('yc' not in variables):
-            lat = nc1.createVariable('lat', 'f4', ('yc','xc'), zlib=True)
-            lat.axis = 'Y'
+            lat = nc.createVariable('lat', 'f4', ('yc', 'xc'), zlib=True)
             lat.units = 'degrees_north'
             lat.long_name = 'latitude'
             lat.standard_name = 'latitude'
             if lat_values is None:
                 raise NotImplementedError()
-                # dlat = 180.0/(lat_size+1)
-                # lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
             else:
                 lat[:,:] = lat_values[:,:]
             lon = nc.createVariable('lon', 'f4', ('yc', 'xc'), zlib=True)
-            lon.axis = 'X'
             lon.units = 'degrees_east'
             lon.long_name = 'longitude'
             lon.standard_name = 'longitude'
             if lon_values is None:
                 raise NotImplementedError()
-                # dlon = 360.0/lon_size
-                # lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
             else:
                 lon[:,:] = lon_values[:,:]
-    
+
         if ('rlat' in nc.dimensions) and ('rlon' not in variables):
-            lat = nc.createVariable('lat', 'f4', ('rlat','rlon'), zlib=True)
-            lat.axis = 'Y'
+            lat = nc.createVariable('lat', 'f4', ('rlat', 'rlon'), zlib=True)
             lat.units = 'degrees_north'
             lat.long_name = 'latitude'
             lat.standard_name = 'latitude'
             if lat_values is None:
                 raise NotImplementedError()
-                # dlat = 180.0/(lat_size+1)
-                # lat[:] = np.arange(-90.0+dlat,90.0-dlat/2.0,dlat)
             else:
                 lat[:,:] = lat_values[:,:]
             lon = nc.createVariable('lon', 'f4', ('rlat', 'rlon'), zlib=True)
-            lon.axis = 'X'
             lon.units = 'degrees_east'
             lon.long_name = 'longitude'
             lon.standard_name = 'longitude'
             if lon_values is None:
                 raise NotImplementedError()
-                # dlon = 360.0/lon_size
-                # lon[:] = np.arange(0.0,360.0-dlon/2.0,dlon)
             else:
                 lon[:,:] = lon_values[:,:]
-    
+
         # 2.3. Naming Conventions
         # 2.4 Dimensions
         #     If any or all of the dimensions of a variable have the
         #     interpretations of "date or time" (T), "height or depth" (Z),
         #     "latitude" (Y), or "longitude" (X) then we recommend, but do not
-        #     require, those dimensions to appear in the relative order T, then Z,
-        #     then Y, then X
-        # Chunksizes should be set to the expected input/output pattern and be of
-        # the order of 1000000 (that is the product of the chunksize in each
+        #     require, those dimensions to appear in the relative order T,
+        #     then Z, then Y, then X
+        # Chunksizes should be set to the expected input/output pattern and be
+        # of the order of 1000000 (that is the product of the chunksize in each
         # dimention). e.g. for daily data, this might be 30 (a month) or
         # 365 (a year) in time, and then determine the spatial chunks to obtain
         # ~1000000.
@@ -905,64 +895,15 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
                 for (var_attr, attr_value) in var_args['attributes'].items():
                     setattr(ncvar, var_attr, attr_value)
 
-        # 3.1. Units
-        # var1.units = var_units
-        # 3.2. Long Name
-        # var1.long_name = var_standard_name
-        # 3.3. Standard Name
-        # var1.standard_name = var_standard_name
-    
-            if 'fill_mode' in var_args and var_args['fill_mode'] == 'random':
-                data1 = np.random.rand(*var1.shape)*data_scale_factor +\
-                    data_add_offset
-                # num_values = data1.size
-                # if hasattr(data1,'count'):
-                #    masked_values = num_values-data1.count()
-                # else:
-                #    masked_values = 0
-                # data_size_mb = data1.nbytes/1000000.0
-                var1[...] = data1[...]
-            elif fill_mode == 'gradient':
-                data1 = np.arange(0, 1.0+0.5/(var1.size-1), 1.0/(var1.size-1))
-                data1 = data1*data_scale_factor+data_add_offset
-                # if hasattr(data1,'count'):
-                #    masked_values = num_values-data1.count()
-                # else:
-                #    masked_values = 0
-                # data_size_mb = data1.nbytes/1000000.0
-                var1[...] = ma.reshape(data1, var1.shape)
-            elif fill_mode == 'pairing':
-                data1 = np.zeros(var1.shape, dtype=int)
-                dim = -1
-                multiplier = 1
-                while dim >= -len(var1.shape):
-                    elements = np.arange(0, var1.shape[dim])
-                    tile_shape = list(var1.shape)
-                    if dim != -1:
-                        tile_shape[dim] = var1.shape[-1]
-                    tile_shape[-1] = 1
-                    tiled = np.tile(elements, (tile_shape))
-                    if dim != -1:
-                        add = np.swapaxes(tiled, len(var1.shape)+dim,
-                                          len(var1.shape)-1)
-                    else:
-                        add = tiled
-                    data1 += add*multiplier
-                    multiplier *= 10**len(str(var1.shape[dim]))
-                    dim -= 1
-                var1[...] = data1*data_scale_factor+data_add_offset
+            if 'fill_mode' in var_args:
+                ncvar[...] = _default_fill_data(ncvar.shape, **var_args)
+            elif ('values' in var_args) and var_args['values']:
+                ncvar[...] = var_args['values']
 
-    if var_values is not None:
-        var1[...] = var_values
-
-    nc1.close()
-
-    # if verbose:
-    #    str1 = "%s values, %s masked, for %s Mb of uncompressed data."
-    #    print(str1 % (str(num_values),str(masked_values),str(data_size_mb)))
+    nc.close()
 
 
-def period2indices(initial_date,final_date,nc_file,calendar=None):
+def period2indices(initial_date, final_date, nc_file, calendar=None):
     """Find indices corresponding to a given period.
 
     Parameters
@@ -993,19 +934,19 @@ def period2indices(initial_date,final_date,nc_file,calendar=None):
 
     """
 
-    initial_time = time.strptime(initial_date,'%Y-%m-%dT%H:%M:%S')
-    final_time = time.strptime(final_date,'%Y-%m-%dT%H:%M:%S')
+    initial_time = time.strptime(initial_date, '%Y-%m-%dT%H:%M:%S')
+    final_time = time.strptime(final_date, '%Y-%m-%dT%H:%M:%S')
 
-    nc = netCDF4.Dataset(nc_file,'r')
+    nc = netCDF4.Dataset(nc_file, 'r')
     if 'time' not in nc.variables:
         raise NetCDFError("No time variable in the NetCDF file.")
     nctime = nc.variables['time']
     if calendar is None:
-        if hasattr(nctime,'calendar'):
+        if hasattr(nctime, 'calendar'):
             calendar = nctime.calendar
         else:
             calendar = 'gregorian'
-    if calendar in ['gregorian','standard']:
+    if calendar in ['gregorian', 'standard']:
         # The gregorian calendar requires datetime.datetime inputs.
         initial_nctime = datetime.datetime(initial_time.tm_year,
                                            initial_time.tm_mon,
@@ -1033,8 +974,8 @@ def period2indices(initial_date,final_date,nc_file,calendar=None):
                                                    final_time.tm_hour,
                                                    final_time.tm_min,
                                                    final_time.tm_sec)
-    index_ini = netCDF4.date2index(initial_nctime,nctime,calendar=calendar,
+    index_ini = netCDF4.date2index(initial_nctime, nctime, calendar=calendar,
                                    select='after')
-    index_fin = netCDF4.date2index(final_nctime,nctime,calendar=calendar,
+    index_fin = netCDF4.date2index(final_nctime, nctime, calendar=calendar,
                                    select='before')
-    return {'initial_index':index_ini,'final_index':index_fin}
+    return {'initial_index': index_ini, 'final_index': index_fin}
