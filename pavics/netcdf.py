@@ -674,7 +674,8 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
                         time_calendar='gregorian', level_dtype='f4',
                         level_units='Pa', level_positive='down',
                         level_name='height', time_values=None,
-                        level_values=None, lon_values=None, lat_values=None):
+                        level_values=None, lon_values=None, lat_values=None,
+                        close_nc=True):
     """
     Create a dummy NetCDF file on disk.
 
@@ -890,7 +891,7 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
         # 365 (a year) in time, and then determine the spatial chunks to obtain
         # ~1000000.
         for (var_name, var_args) in variables.items():
-            ncvar = nc.createVariable(var_name, *var_args['create_args'])
+            ncvar = nc.createVariable(var_name, **var_args['create_args'])
             if 'attributes' in var_args:
                 for (var_attr, attr_value) in var_args['attributes'].items():
                     setattr(ncvar, var_attr, attr_value)
@@ -900,7 +901,10 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC',
             elif ('values' in var_args) and var_args['values']:
                 ncvar[...] = var_args['values']
 
-    nc.close()
+    if close_nc:
+        nc.close()
+    else:
+        return nc
 
 
 def period2indices(initial_date, final_date, nc_file, calendar=None):
