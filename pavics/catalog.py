@@ -17,8 +17,11 @@ import json
 import urllib2
 import requests
 
+import numpy as np
 import threddsclient
 import netCDF4
+
+import slicetools
 
 
 def solr_add_field(solr_server,field_name,field_type='string'):
@@ -99,11 +102,29 @@ def solr_update(solr_server,update_data):
     return update_result
 
 
-def thredds_crawler(thredds_server,index_facets,depth=50,
-                    ignored_variables=None,set_dataset_id=False,
-                    overwrite_dataset_id=False,internal_ip=None,
-                    external_ip=None,output_internal_ip=False,
-                    wms_alternate_server=None):
+def ncvar_min_max(ncvar, memory_limit=500000000):
+    divisions = slicetools.divide_slices_for_memory_fit(
+        ncvar.shape, ncvar.dtype, memory_size=memory_limit)
+    for i, division in enumerate(divisions):
+        subdata = ncvar[division]
+        if i == 0:
+            data_min = subdata.min()
+            data_max = subdata.max()
+        else:
+            tmp_min = subdata.min()
+            if tmp_min < data_min:
+                data_min = tmp_min
+            tmp_max = subdata.max()
+            if tmp_max > data_max:
+                data_max = tmp_max
+    return (float(data_min), float(data_max))
+
+
+def thredds_crawler(thredds_server, index_facets, depth=50,
+                    ignored_variables=None, set_dataset_id=False,
+                    overwrite_dataset_id=False, internal_ip=None,
+                    external_ip=None, output_internal_ip=False,
+                    wms_alternate_server=None, target_files=None):
     """Crawl thredds server for metadata.
 
     Parameters
@@ -130,6 +151,8 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
     external_ip : string
     output_internal_ip : bool
     wms_alternate_server : string
+    target_files : list of string
+        only those file names will be crawled.
 
     Returns
     -------
@@ -154,6 +177,9 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
 
     add_data = []
     for thredds_dataset in threddsclient.crawl(thredds_server,depth=depth):
+        if target_files:
+            if thredds_dataset.ID.split('/')[-1] not in target_files:
+                continue
         wms_url = thredds_dataset.wms_url()
         # Change wms_url server if requested
         if wms_alternate_server is not None:
@@ -172,6 +198,7 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
         try:
             nc = netCDF4.Dataset(urls['opendap_url'],'r')
         except:
+            # Should have a logging mechanism
             continue
         # Modifying all the ip addresses if there is an issue of
         # internal/external ips (e.g. OpenStack)
@@ -222,9 +249,18 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
                 if not (ccf or clong or cunits):
                     continue
                 for parameter_name in ['variable','cf_standard_name',
-                                       'variable_long_name','units']:
+                                       'variable_long_name','units',
+                                       '_data_min','_data_max','_has_time']:
                     if parameter_name not in doc:
                         doc[parameter_name] = []
+                try:
+                    (data_min, data_max) = ncvar_min_max(ncvar)
+                except:
+                    # Should have a logging mechanism for this...
+                    continue
+                else:
+                    doc['_data_min'].append(data_min)
+                    doc['_data_max'].append(data_max)
                 doc['variable'].append(var_name)
                 if ccf:
                     value = getattr(ncvar,'standard_name')
@@ -240,16 +276,20 @@ def thredds_crawler(thredds_server,index_facets,depth=50,
                     doc['units'].append(getattr(ncvar,'units'))
                 else:
                     doc['units'].append('_undefined')
+                if 'time' in ncvar.dimensions:
+                    doc['_has_time'].append(1)
+                else:
+                    doc['_has_time'].append(0)
         nc.close()
         add_data.append(doc)
     return add_data
 
 
-def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
-                ignored_variables=None,set_dataset_id=False,
-                overwrite_dataset_id=False,internal_ip=None,
-                external_ip=None,output_internal_ip=False,
-                wms_alternate_server=None):
+def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
+                ignored_variables=None, set_dataset_id=False,
+                overwrite_dataset_id=False, internal_ip=None,
+                external_ip=None, output_internal_ip=False,
+                wms_alternate_server=None, target_files=None):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -278,6 +318,8 @@ def pavicrawler(thredds_server,solr_server,index_facets,depth=50,
     external_ip : string
     output_internal_ip : bool
     wms_alternate_server : string
+    target_files : list of string
+        only those file names will be crawled.
 
     Returns
     -------
@@ -482,6 +524,13 @@ def datasets_from_solr_search(solr_search_result):
             for var_name in doc['cf_standard_name']:
                 if var_name not in ref_doc['keywords']:
                     ref_doc['keywords'].append(var_name)
+            # Fetching min/max from multiple files
+            if '_data_min' in doc:
+                if float(doc['_data_min']) < float(ref_doc['_data_min']):
+                    ref_doc['_data_min'] = doc['_data_min']
+            if '_data_max' in doc:
+                if float(doc['_data_max']) > float(ref_doc['_data_max']):
+                    ref_doc['_data_max'] = doc['_data_max']
         else:
             known_datasets.append(doc['dataset_id'])
             first_instances.append(i)
