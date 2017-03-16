@@ -345,7 +345,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                                overwrite_dataset_id=overwrite_dataset_id,
                                internal_ip=internal_ip,external_ip=external_ip,
                                output_internal_ip=output_internal_ip,
-                               wms_alternate_server=wms_alternate_server)
+                               wms_alternate_server=wms_alternate_server,
+                               target_files=target_files)
     return solr_update(solr_server,add_data)
 
 
