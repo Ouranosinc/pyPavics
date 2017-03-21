@@ -27,7 +27,8 @@ import slicetools
 logger = logging.getLogger(__name__)
 
 
-def solr_add_field(solr_server,field_name,field_type='string'):
+def solr_add_field(solr_server,field_name,field_type='string',
+                   multivalued=False):
     """Add a field in a Solr database.
 
     Parameters
@@ -45,9 +46,15 @@ def solr_add_field(solr_server,field_name,field_type='string'):
     """
 
     schema_path = os.path.join(solr_server,'schema')
-    add_field = {'add-field':{'name':field_name,
-                              'type':field_type,
-                              'stored':'true'}}
+    if multivalued:
+        add_field = {'add-field':{'name':field_name,
+                                  'type':field_type,
+                                  'stored':'true',
+                                  'multiValued':'true'}}
+    else:
+        add_field = {'add-field':{'name':field_name,
+                                  'type':field_type,
+                                  'stored':'true'}}
     headers = {'Content-type':'application/json'}
     r = requests.post(schema_path,data=json.dumps(add_field),headers=headers)
     return r._content
@@ -94,7 +101,11 @@ def solr_update(solr_server,update_data):
                 for one_key in one_update.keys():
                     if one_key not in list_of_fields:
                         # New fields are added as string type (default)
-                        solr_add_field(solr_server,one_key)
+                        if hasattr(one_update[one_key], 'append'):
+                            solr_add_field(solr_server,one_key,
+                                           multivalued=True)
+                        else:
+                            solr_add_field(solr_server,one_key)
                         list_of_fields.append(one_key)
             url_response = urllib2.urlopen(url_request)
             #return 'Unknown field'
@@ -177,7 +188,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                              'lon_bnds','lon_bounds','yc_bnds','xc_bnds',
                              'yc_bounds','xc_bounds','rlat_bnds',
                              'rlat_bounds','rlon_bnds','rlon_bounds',
-                             'level','level_bnds','level_bounds']
+                             'level','level_bnds','level_bounds','plev']
 
     add_data = []
     for thredds_dataset in threddsclient.crawl(thredds_server,depth=depth):
