@@ -16,12 +16,15 @@ import os
 import json
 import urllib2
 import requests
+import logging
 
 import numpy as np
 import threddsclient
 import netCDF4
 
 import slicetools
+
+logger = logging.getLogger(__name__)
 
 
 def solr_add_field(solr_server,field_name,field_type='string'):
@@ -67,6 +70,7 @@ def solr_update(solr_server,update_data):
     """
 
     solr_json_input = json.dumps(update_data)
+    logger.debug(solr_json_input)
     # Send Solr update request
     solr_method = 'update/json?commit=true'
     url_request = urllib2.Request(url=solr_server+solr_method,
@@ -250,7 +254,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     continue
                 for parameter_name in ['variable','cf_standard_name',
                                        'variable_long_name','units',
-                                       '_data_min','_data_max','_has_time']:
+                                       'data_min','data_max','has_time']:
                     if parameter_name not in doc:
                         doc[parameter_name] = []
                 try:
@@ -259,8 +263,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     # Should have a logging mechanism for this...
                     continue
                 else:
-                    doc['_data_min'].append(data_min)
-                    doc['_data_max'].append(data_max)
+                    doc['data_min'].append(data_min)
+                    doc['data_max'].append(data_max)
                 doc['variable'].append(var_name)
                 if ccf:
                     value = getattr(ncvar,'standard_name')
@@ -277,9 +281,9 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                 else:
                     doc['units'].append('_undefined')
                 if 'time' in ncvar.dimensions:
-                    doc['_has_time'].append(1)
+                    doc['has_time'].append(1)
                 else:
-                    doc['_has_time'].append(0)
+                    doc['has_time'].append(0)
         nc.close()
         add_data.append(doc)
     return add_data
@@ -526,12 +530,12 @@ def datasets_from_solr_search(solr_search_result):
                 if var_name not in ref_doc['keywords']:
                     ref_doc['keywords'].append(var_name)
             # Fetching min/max from multiple files
-            if '_data_min' in doc:
-                if float(doc['_data_min']) < float(ref_doc['_data_min']):
-                    ref_doc['_data_min'] = doc['_data_min']
-            if '_data_max' in doc:
-                if float(doc['_data_max']) > float(ref_doc['_data_max']):
-                    ref_doc['_data_max'] = doc['_data_max']
+            if 'data_min' in doc:
+                if float(doc['data_min']) < float(ref_doc['data_min']):
+                    ref_doc['data_min'] = doc['data_min']
+            if 'data_max' in doc:
+                if float(doc['data_max']) > float(ref_doc['data_max']):
+                    ref_doc['data_max'] = doc['data_max']
         else:
             known_datasets.append(doc['dataset_id'])
             first_instances.append(i)
