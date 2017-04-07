@@ -1,6 +1,6 @@
 import os
 import copy
-import http
+import http.client
 try:
     from urllib.parse import quote_plus, urlparse
 except ImportError:

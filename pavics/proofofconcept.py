@@ -7,7 +7,7 @@ esgf_search_url = 'https://esgf-node.llnl.gov/esg-search'
 # type is one of Dataset, File or Aggregation
 # distrib will determine if searching only one the selected node or all
 # the federated nodes.
-search_dict = esgf.ESGFSearchDict({'type':'Dataset',
+search_dict = esgf.ESGFSearchDict({'type':'File',
                                    'distrib':'true',
                                    'project':'CMIP5',
                                    'institute':None,
@@ -31,4 +31,7 @@ j1 = json.loads(json_res)
 j1['response']['numFound']
 len(j1['response']['docs'])
 
-
+# If numFound > len, we need to split the request, since this is Solr and
+# there are concurrency issues with pagination
+# Note that Solr default sort order is oldest document first (editing a
+# document renews it completely)
