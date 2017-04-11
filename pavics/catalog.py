@@ -166,7 +166,10 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
     output_internal_ip : bool
     wms_alternate_server : string
     target_files : list of string
-        only those file names will be crawled.
+        only those file names will be crawled, can be urls or full paths,
+        but only the file name will be used (if two files have the same name
+        in different folders of the thredds catalog, they are both picked up
+        by the crawler.
 
     Returns
     -------
@@ -190,9 +193,13 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                              'level', 'level_bnds', 'level_bounds', 'plev']
 
     add_data = []
+    target_file_names = []
+    if target_files:
+        for target_file in target_files:
+            target_file_names.append(target_file.split('/')[-1])
     for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth):
         if target_files:
-            if thredds_dataset.ID.split('/')[-1] not in target_files:
+            if thredds_dataset.ID.split('/')[-1] not in target_file_names:
                 continue
         wms_url = thredds_dataset.wms_url()
         # Change wms_url server if requested
