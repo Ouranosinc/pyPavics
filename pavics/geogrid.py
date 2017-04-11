@@ -411,6 +411,8 @@ def _find_nearest_from_rectilinear_centroids(lon_centroids, lat_centroids,
     """
 
     distance_lon = np.mod(np.abs(lon_centroids-lon_point), 360)
+    warp_indices = np.where(distance_lon>180)
+    distance_lon[warp_indices] = np.abs(distance_lon[warp_indices]-360.0)
     indices = np.where(distance_lon.min() == distance_lon)
     if len(indices[0]) > 1:
         msg = "More than one nearest meridian, returning first index."
