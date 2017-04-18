@@ -312,9 +312,9 @@ def quadrilaterals_mesh_to_centroids(x_vertices, y_vertices):
 
     """
 
-    x = (x_vertices[0:-1,0:-1]+x_vertices[1:,0:-1]+x_vertices[1:,1:]+
+    x = (x_vertices[0:-1,0:-1] + x_vertices[1:,0:-1] + x_vertices[1:,1:] +
          x_vertices[0:-1,1:])/4.0
-    y = (y_vertices[0:-1,0:-1]+y_vertices[1:,0:-1]+y_vertices[1:,1:]+
+    y = (y_vertices[0:-1,0:-1] + y_vertices[1:,0:-1] + y_vertices[1:,1:] +
          y_vertices[0:-1,1:])/4.0
     return x, y
 
@@ -352,8 +352,8 @@ def rectilinear_2d_bounds_to_vertices(lon_bnds, lat_bnds):
 
     """
 
-    lon_vertices = list(lon_bnds[:,0])+[lon_bnds[-1,1]]
-    lat_vertices = list(lat_bnds[:,0])+[lat_bnds[-1,1]]
+    lon_vertices = list(lon_bnds[:,0]) + [lon_bnds[-1,1]]
+    lat_vertices = list(lat_bnds[:,0]) + [lat_bnds[-1,1]]
     return (np.array(lon_vertices), np.array(lat_vertices))
 
 
@@ -410,8 +410,12 @@ def _find_nearest_from_rectilinear_centroids(lon_centroids, lat_centroids,
 
     """
 
+    # First calculate the difference in longitudes and warp overflowing
+    # values back to [0, 360]
     distance_lon = np.mod(np.abs(lon_centroids-lon_point), 360)
-    warp_indices = np.where(distance_lon>180)
+    # For distances over 180, there's a shorter distance going the other
+    # way around the globe.
+    warp_indices = np.where(distance_lon > 180)
     distance_lon[warp_indices] = np.abs(distance_lon[warp_indices]-360.0)
     indices = np.where(distance_lon.min() == distance_lon)
     if len(indices[0]) > 1:
@@ -421,7 +425,7 @@ def _find_nearest_from_rectilinear_centroids(lon_centroids, lat_centroids,
     distance_lat = np.abs(lat_centroids-lat_point)
     indices = np.where(distance_lat.min() == distance_lat)
     if len(indices[0]) > 1:
-        msg = "More than one nearest meridian, returning first index."
+        msg = "More than one nearest parallel, returning first index."
         logging.warning(msg)
     j = indices[0][0]
     minimum_distance = distance_lon_lat(lon_centroids[i], lat_centroids[j],
