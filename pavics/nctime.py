@@ -2,6 +2,7 @@ import datetime
 import numbers
 
 import numpy as np
+from past.builtins import basestring
 import netCDF4
 
 

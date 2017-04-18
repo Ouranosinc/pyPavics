@@ -16,6 +16,7 @@ Slice synthax reminder: slice([start,] stop[, step])
 """
 
 import numpy as np
+from past.builtins import basestring
 
 
 class SliceError(Exception):

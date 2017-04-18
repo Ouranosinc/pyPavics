@@ -28,6 +28,7 @@ import time
 import datetime
 import numpy as np
 import numpy.ma as ma
+from past.builtins import basestring
 import netCDF4
 
 

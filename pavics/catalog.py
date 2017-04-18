@@ -14,7 +14,11 @@ Functions:
 
 import os
 import json
-import urllib2
+try:
+    from urllib.request import urlopen, Request
+    from urllib.error import HTTPError
+except ImportError:
+    from urllib2 import urlopen, Request, HTTPError
 import requests
 import logging
 
@@ -79,17 +83,16 @@ def solr_update(solr_server, update_data):
     logger.debug(solr_json_input)
     # Send Solr update request
     solr_method = 'update/json?commit=true'
-    url_request = urllib2.Request(url=solr_server + solr_method,
-                                  data=solr_json_input)
+    url_request = Request(url=solr_server + solr_method, data=solr_json_input)
     url_request.add_header('Content-type', 'application/json')
     try:
-        url_response = urllib2.urlopen(url_request)
-    except urllib2.HTTPError as err:
+        url_response = urlopen(url_request)
+    except HTTPError as err:
         if err.msg == 'Bad Request':
             # One of the most likely reason for this is trying to add
             # a field that is not part of the Solr Schema.
             fields_path = os.path.join(solr_server, 'schema', 'fields?wt=json')
-            fields_request = urllib2.urlopen(fields_path)
+            fields_request = urlopen(fields_path)
             fields_response = json.loads(fields_request.read())
             list_of_fields = []
             for one_field in fields_response['fields']:
@@ -106,7 +109,7 @@ def solr_update(solr_server, update_data):
                         else:
                             solr_add_field(solr_server, one_key)
                         list_of_fields.append(one_key)
-            url_response = urllib2.urlopen(url_request)
+            url_response = urlopen(url_request)
             # return 'Unknown field'
         else:
             raise err
@@ -431,8 +434,8 @@ def pavicsvalidate(solr_server, required_facets, limit_paths=None,
             warp = (str(n), str(n + nrows))
             my_search = 'q=*:*&start=%s&rows=%s&wt=json' % warp
         my_url = solr_server + "select?%s" % (my_search,)
-        url_request = urllib2.Request(url=my_url)
-        url_response = urllib2.urlopen(url_request)
+        url_request = Request(url=my_url)
+        url_response = urlopen(url_request)
         search_result = url_response.read()
         url_response.close()
         search_dict = json.loads(search_result)
@@ -496,8 +499,8 @@ def pavicsupdate(solr_server, update_dict):
         my_search = "q=id:%s&wt=json" % (update_dict['id'])
     elif 'dataset_id' in update_dict:
         my_search = "q=dataset_id:%s&wt=json" % (update_dict['dataset_id'])
-    url_request = urllib2.Request(url=solr_server + "select?%s" % (my_search,))
-    url_response = urllib2.urlopen(url_request)
+    url_request = Request(url=solr_server + "select?%s" % (my_search,))
+    url_response = urlopen(url_request)
     search_result = url_response.read()
     url_response.close()
     search_dict = json.loads(search_result)
@@ -655,9 +658,9 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     if my_query != '&q=':
         my_search += my_query
     my_search = my_search.lstrip('&')
-    url_request = urllib2.Request(url=solr_server + 'select?' + my_search)
+    url_request = Request(url=solr_server + 'select?' + my_search)
     url_request.add_header('Content-type', 'application/json')
-    url_response = urllib2.urlopen(url_request)
+    url_response = urlopen(url_request)
     search_result = url_response.read()
     url_response.close()
     if search_type == 'Dataset':

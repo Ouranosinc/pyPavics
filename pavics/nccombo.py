@@ -1,4 +1,5 @@
 import numpy as np
+from past.builtins import basestring
 import netCDF4
 
 from . import netcdf as pavnc

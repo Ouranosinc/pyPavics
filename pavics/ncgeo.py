@@ -1,3 +1,4 @@
+from past.builtins import basestring
 import netCDF4
 
 from . import geogrid
