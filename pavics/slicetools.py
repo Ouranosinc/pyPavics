@@ -15,9 +15,7 @@ slice and or Ellipsis.
 Slice synthax reminder: slice([start,] stop[, step])
 """
 
-import copy
 import numpy as np
-import numpy.ma as ma
 
 
 class SliceError(Exception):
@@ -77,13 +75,13 @@ def divide_slice(one_slice, divisions, length=None):
         step = 1
     else:
         step = one_slice.step
-    if divisions > final_indice-initial_indice:
+    if divisions > final_indice - initial_indice:
         raise SliceError("divisions greater than number of values in slice.")
     num_of_values = int(np.ceil((final_indice-initial_indice)/float(step)))
     divided_slices = []
     for i in reversed(range(1, divisions + 1)):
         num_in_slice = int(np.round(num_of_values/float(i)))
-        stop_indice = initial_indice+num_in_slice*step
+        stop_indice = initial_indice + num_in_slice*step
         if stop_indice > final_indice:
             stop_indice = final_indice
         next_slice = slice(initial_indice, stop_indice, step)
@@ -128,7 +126,7 @@ def divide_slices(shape, divisions, slices=None, dimensions=None):
     if isinstance(slices, dict):
         convert_slices = []
         for i in range(len(shape)):
-            if dimensions[i] in slices.keys():
+            if dimensions[i] in slices:
                 convert_slices.append(slices[dimensions[i]])
             else:
                 convert_slices.append(None)
@@ -141,7 +139,7 @@ def divide_slices(shape, divisions, slices=None, dimensions=None):
     if isinstance(divisions, dict):
         convert_divisions = []
         for i in range(len(shape)):
-            if dimensions[i] in divisions.keys():
+            if dimensions[i] in divisions:
                 convert_divisions.append(divisions[dimensions[i]])
             else:
                 convert_divisions.append(1)

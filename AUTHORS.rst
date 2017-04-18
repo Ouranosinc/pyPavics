@@ -4,7 +4,7 @@ Credits
 Development Lead
 ----------------
 
-* Blaise Gauvin St-Denis <GauvinSt-Denis.Blaise@ouranos.ca>
+* Blaise Gauvin St-Denis <st-denis.blaise@ouranos.ca>
 * David Byrns <david.byrns@crim.ca>
 
 Contributors

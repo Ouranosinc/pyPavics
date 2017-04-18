@@ -21,7 +21,7 @@ import logging
 import threddsclient
 import netCDF4
 
-import slicetools
+from . import slicetools
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ def solr_update(solr_server, update_data):
             if not hasattr(update_data, 'append'):
                 update_data = [update_data]
             for one_update in update_data:
-                for one_key in one_update.keys():
+                for one_key in one_update:
                     if one_key not in list_of_fields:
                         # New fields are added as string type (default)
                         if hasattr(one_update[one_key], 'append'):

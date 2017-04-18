@@ -1,6 +1,6 @@
 import netCDF4
 
-import geogrid
+from . import geogrid
 
 
 def _nearest_lon_lat(nclon, nclat, lon, lat, maximum_distance=None):

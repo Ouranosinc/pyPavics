@@ -1,9 +1,9 @@
 import numpy as np
 import netCDF4
 
-import netcdf as pavnc
-import nctime
-import ncgeo
+from . import netcdf as pavnc
+from . import nctime
+from . import ncgeo
 
 
 def get_time_file_and_indice(nc_resource, ncvardims, ordered_indices,
@@ -87,7 +87,7 @@ def get_point(nc_resource, var_names, ordered_indices=None, named_indices=None,
         ncvars = [ncdataset.variables[x] for x in var_names]
     elif isinstance(nc_resource, netCDF4._netCDF4.Variable):
         ncdataset = None
-        vardims = {nc_resource.name: nc_resource.dimensions.keys()}
+        vardims = {nc_resource.name: list(nc_resource.dimensions.keys())}
         ncvars = [nc_resource]
     elif isinstance(nc_resource, (list, tuple)):
         # since there are multiple files, we assume there is a time
