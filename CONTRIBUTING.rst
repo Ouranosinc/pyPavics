@@ -13,7 +13,9 @@ Types of Contributions
 Report Bugs
 ~~~~~~~~~~~
 
-Report bugs at david.byrns@crim.ca.
+Report bugs through github issues:
+
+https://github.com/Ouranosinc/pyPavics
 
 If you are reporting a bug, please include:
 
@@ -29,17 +31,17 @@ Pavics could always use more documentation, whether as part of the
 official Pavics docs, in docstrings, or even on the web in blog posts,
 articles, and such.
 
-Submit Feedback
-~~~~~~~~~~~~~~~
+Propose a feature
+~~~~~~~~~~~~~~~~~
 
-The best way to send feedback is to file an issue at david.byrns@crim.ca.
+Propose features through github issues:
 
-If you are proposing a feature:
+https://github.com/Ouranosinc/pyPavics
 
 * Explain in detail how it would work.
 * Keep the scope as narrow as possible, to make it easier to implement.
 * Remember that this is a volunteer-driven project, and that contributions
-  are welcome :)
+  are welcome
 
 
 Get Started!
@@ -47,35 +49,21 @@ Get Started!
 
 Ready to contribute? Here's how to set up `pavics` for local development.
 
-1. Clone the `keyword_worker_refcom` repo from the Mercurial repository.
+1. Clone the github repository.
 
-    hg clone <repo_location>
+    https://github.com/Ouranosinc/pyPavics.git
 
-2. Install your local copy and use a virtualenv. Assuming you have
-   virtualenv installed, this is how you set up your fork for local
-   development::
-    
-    $ cd pavics/
-    $ virtualenv -p python 3.5 env
-    $ source env/bin/activate.csh
+2. Install your local copy, e.g.::
+
     $ python setup.py develop
 
-   Now you can make your changes locally.
-
 3. When you're done making changes, check that your changes pass flake8 and the
-   tests, including testing other Python versions with tox::
+   tests::
 
     $ flake8 pavics tests
     $ python setup.py test
-    $ tox
 
-   To get flake8 and tox, just pip install them into your virtualenv.
-
-4. Commit your changes and push your branch to GitHub::
-
-    $ hg commit -m "Your detailed description of your changes."
-
-5. Submit a pull request to the author.
+4. Submit a pull request to the author.
 
 
 Pull Request Guidelines
@@ -85,14 +73,6 @@ Before you submit a pull request, check that it meets these guidelines:
 
 1. The pull request should include tests.
 2. If the pull request adds functionality, the docs should be updated. Put
-   your new functionality into a function with a docstring, and add the
-   feature to the list in README.rst.
-3. The tests should work for the specifid version of Python for this project.
-
-
-Tips
-----
-
-To run a subset of tests::
-
-    $ python -m unittest tests.test_pavics
+   your new functionality into a function with a docstring.
+3. The tests should work for the specifid version of Python for this project,
+   that is both Python >2.7 and Python >3.5
