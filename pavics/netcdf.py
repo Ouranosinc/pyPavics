@@ -902,6 +902,7 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC', use_time=True,
         data_size_mb = data1.nbytes/1000000.0
         var1[...] = ma.reshape(data1, var1.shape)
     elif fill_mode == 'pairing':
+        # This is obsolete and broken, see synthetic.py
         data1 = np.zeros(var1.shape)
         dim = -1
         multiplier = 1

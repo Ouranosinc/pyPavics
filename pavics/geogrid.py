@@ -1,6 +1,9 @@
 import logging
 
 import numpy as np
+from shapely.geometry import Point, Polygon, LineString
+from shapely import iterops
+from shapely.ops import cascaded_union
 
 
 class GeogridError(Exception):
@@ -572,3 +575,525 @@ def find_nearest(longitudes, latitudes, longitude, latitude,
     elif grid_type == 'irregular_2d_vertices':
         f = _find_nearest_from_irregular_vertices
         return f(longitudes, latitudes, longitude, latitude, maximum_distance)
+
+
+def _polygon_grid_subset_from_rectilinear_vertices(lon_vertices, lat_vertices,
+                                                   geometry):
+    """Find the subset of a rectilinear grid defined by its vertices such as
+       to cover a given geometry.
+
+    Parameters
+    ----------
+    lon_vertices - numpy array
+    lat_vertices - numpy array
+    geometry - Shapely geometry
+
+    Returns
+    -------
+    slice_i,slice_j - slice
+        The slices (with respect to the centroids) of the subset.
+
+    """
+
+    if geometry.bounds[2]<lon_vertices.min():
+        raise GeogridError("Geometry falls outside the grid.")
+    elif geometry.bounds[0]>lon_vertices.max():
+        raise GeogridError("Geometry falls outside the grid.")
+    elif geometry.bounds[1]<lat_vertices.min():
+        raise GeogridError("Geometry falls outside the grid.")
+    elif geometry.bounds[3]>lat_vertices.max():
+        raise GeogridError("Geometry falls outside the grid.")
+    indices = np.where(np.bitwise_and(lon_vertices>=geometry.bounds[0],
+                                      lon_vertices<=geometry.bounds[2]))
+    if len(indices[0]) == 0:
+        distances = np.abs(lon_vertices-geometry.bounds[0])
+        i1 = np.where(distances==distances.min())[0][0]
+        distances[i1] = distances.max()+1
+        i2 = np.where(distances==distances.min())[0][0]
+        if i2<i1:
+            i1 = i2
+        slice_lon = slice(i1,i1+1)
+    else:
+        slice_lon = slice(indices[0][0]-1,indices[0][-1]+1)
+    indices = np.where(np.bitwise_and(lat_vertices>=geometry.bounds[1],
+                                      lat_vertices<=geometry.bounds[3]))
+    if len(indices[0]) == 0:
+        distances = np.abs(lat_vertices-geometry.bounds[1])
+        i1 = np.where(distances==distances.min())[0][0]
+        distances[i1] = distances.max()+1
+        i2 = np.where(distances==distances.min())[0][0]
+        if i2<i1:
+            i1 = i2
+        slice_lat = slice(i1,i1+1)
+    else:
+        slice_lat = slice(indices[0][0]-1,indices[0][-1]+1)
+    return (slice_lon,slice_lat)
+
+
+def _polygon_grid_subset_from_rectilinear_centroids(lon_centroids,
+                                                    lat_centroids,
+                                                    geometry,
+                                                    lon_vertices=None,
+                                                    lat_vertices=None):
+    """Find the subset of a rectilinear grid defined by its centroids such as
+       to cover a given geometry.
+
+    Parameters
+    ----------
+    lon_centroids - numpy array
+    lat_centroids - numpy array
+    geometry - Shapely geometry
+
+    Returns
+    -------
+    slice_i,slice_j - slice
+        The slices (with respect to the centroids) of the subset.
+
+    """
+
+    if (lon_vertices is None) or (lat_vertices is None):
+        f = rectilinear_centroids_to_vertices
+        (lon_vertices,lat_vertices) = f(lon_centroids,lat_centroids)
+    f = _polygon_grid_subset_from_rectilinear_vertices
+    return f(lon_vertices,lat_vertices,geometry)
+
+
+def _polygon_grid_subset_from_irregular_vertices(lon_vertices, lat_vertices,
+                                                 geometry, lon_centroids=None,
+                                                 lat_centroids=None):
+    """Find the subset of an irregular grid defined by its vertices such as
+       to cover a given geometry.
+
+    Parameters
+    ----------
+    lon_vertices - numpy array
+    lat_vertices - numpy array
+    geometry - Shapely geometry
+
+    Returns
+    -------
+    slice_i,slice_j - slice
+        The slices (with respect to the centroids) of the subset.
+
+    """
+
+    c1 = lon_vertices >= geometry.bounds[0]
+    c2 = lon_vertices <= geometry.bounds[2]
+    c3 = lat_vertices >= geometry.bounds[1]
+    c4 = lat_vertices <= geometry.bounds[3]
+    indices = np.where(c1 & c2 & c3 & c4)
+    if len(indices[0]) == 0:
+        if (lon_centroids is None) or (lat_centroids is None):
+            f = quadrilaterals_mesh_to_centroids
+            lon_centroids, lat_centroids = f(lon_vertices, lat_vertices)
+        distances = distance_lon_lat(lon_centroids, lat_centroids,
+                                     geometry.centroid.x,
+                                     geometry.centroid.y)
+        indices = np.where(distances == distances.min())
+        i = indices[0][0]
+        j = indices[1][0]
+        pol1 = Polygon([(lon_vertices[i,j], lat_vertices[i,j]),
+                        (lon_vertices[i,j+1], lat_vertices[i,j+1]),
+                        (lon_vertices[i+1,j+1], lat_vertices[i+1,j+1]),
+                        (lon_vertices[i+1,j], lat_vertices[i+1,j])])
+        if not pol1.intersects(geometry):
+            raise GeogridError("Geometry falls outside the grid.")
+    search_i_min = max(0, indices[0].min() - 1)
+    search_i_max = min(lon_vertices.shape[0] - 2, indices[0].max())
+    search_j_min = max(0, indices[1].min() - 1)
+    search_j_max = min(lon_vertices.shape[1] - 2, indices[1].max())
+    if indices[0].min() == 0:
+        min1 = 0
+    else:
+        for j in range(search_j_min, search_j_max + 1):
+            i = indices[0].min() - 1
+            pol1 = Polygon([(lon_vertices[i,j], lat_vertices[i,j]),
+                            (lon_vertices[i,j+1], lat_vertices[i,j+1]),
+                            (lon_vertices[i+1,j+1], lat_vertices[i+1,j+1]),
+                            (lon_vertices[i+1,j], lat_vertices[i+1,j])])
+            if pol1.intersects(geometry):
+                min1 = indices[0].min() - 1
+                break
+        else:
+            min1 = indices[0].min()
+    if indices[1].min() == 0:
+        min2 = 0
+    else:
+        for i in range(search_i_min, search_i_max + 1):
+            j = indices[1].min() - 1
+            pol1 = Polygon([(lon_vertices[i,j], lat_vertices[i,j]),
+                            (lon_vertices[i,j+1], lat_vertices[i,j+1]),
+                            (lon_vertices[i+1,j+1], lat_vertices[i+1,j+1]),
+                            (lon_vertices[i+1,j], lat_vertices[i+1,j])])
+            if pol1.intersects(geometry):
+                min2 = indices[1].min() - 1
+                break
+        else:
+            min2 = indices[1].min()
+    if indices[0].max() == lon_vertices.shape[0] - 1:
+        max1 = lon_vertices.shape[0] - 1
+    else:
+        for j in range(search_j_min, search_j_max + 1):
+            i = indices[0].max()
+            pol1 = Polygon([(lon_vertices[i,j], lat_vertices[i,j]),
+                            (lon_vertices[i,j+1], lat_vertices[i,j+1]),
+                            (lon_vertices[i+1,j+1], lat_vertices[i+1,j+1]),
+                            (lon_vertices[i+1,j], lat_vertices[i+1,j])])
+            if pol1.intersects(geometry):
+                max1 = indices[0].max() + 1
+                break
+        else:
+            max1 = indices[0].max()
+    if indices[1].max() == lon_vertices.shape[1] - 1:
+        max2 = lon_vertices.shape[1] - 1
+    else:
+        for i in range(search_i_min, search_i_max + 1):
+            j = indices[1].max()
+            pol1 = Polygon([(lon_vertices[i,j], lat_vertices[i,j]),
+                            (lon_vertices[i,j+1], lat_vertices[i,j+1]),
+                            (lon_vertices[i+1,j+1], lat_vertices[i+1,j+1]),
+                            (lon_vertices[i+1,j], lat_vertices[i+1,j])])
+            if pol1.intersects(geometry):
+                max2 = indices[1].max() + 1
+                break
+        else:
+            max2 = indices[1].max()
+    slice1 = slice(min1, max1)
+    slice2 = slice(min2, max2)
+    return (slice1, slice2)
+
+
+def _polygon_grid_subset_from_irregular_centroids(lon_centroids, lat_centroids,
+                                                  geometry, lon_vertices=None,
+                                                  lat_vertices=None):
+    """Find the subset of an irregular grid defined by its centroids such as
+       to cover a given geometry.
+
+    Parameters
+    ----------
+    lon_centroids - numpy array
+    lat_centroids - numpy array
+    geometry - Shapely geometry
+
+    Returns
+    -------
+    slice_i,slice_j - slice
+        The slices (with respect to the centroids) of the subset.
+
+    """
+
+    if (lon_vertices is None) or (lat_vertices is None):
+        lon_vertices,lat_vertices = ctoqmesh(lon_centroids,lat_centroids)
+    f = _polygon_grid_subset_from_irregular_vertices
+    return f(lon_vertices,lat_vertices,geometry,lon_centroids,lat_centroids)
+
+
+def _inpolygon_from_list_of_points(lon_points, lat_points, geometry):
+    """Find the points from a list of poits that fall in a geometry.
+
+    Parameters
+    ----------
+    lon_points - numpy array
+    lat_points - numpy array
+    geometry - Shapely geometry
+
+    Returns
+    -------
+    out - list of int
+        The indices of the points inside the geometry.
+
+    """
+
+    c1 = lon_points >= geometry.bounds[0]
+    c2 = lon_points <= geometry.bounds[2]
+    c3 = lat_points >= geometry.bounds[1]
+    c4 = lat_points <= geometry.bounds[3]
+    c12 = np.bitwise_and(c1,c2)
+    indices = np.where(np.bitwise_and(np.bitwise_and(c12,c3),c4))
+    if len(indices[0]) == 0:
+        return None
+    points = []
+    for i in indices[0]:
+        points.append(Point(lon_points[i],lat_points[i]))
+    inside_points = list(iterops.contains(geometry,points))
+    valid_indices = []
+    for c,i in enumerate(indices[0]):
+        if points[c] in inside_points:
+            valid_indices.append(i)
+    return valid_indices
+
+def _inpolygon_from_rectilinear_vertices(lon_vertices, lat_vertices, geometry):
+    """Find the points from a rectilinear grid defined by its vertices that 
+       fall in a geometry.
+
+    Parameters
+    ----------
+    lon_vertices - numpy array
+    lat_vertices - numpy array
+    geometry - Shapely geometry
+
+    Returns
+    -------
+    out - tuple of numpy arrays
+        The indices of the centroids inside the geometry.
+
+    """
+
+    f = _polygon_grid_subset_from_rectilinear_vertices
+    (slice_lon,slice_lat) = f(lon_vertices,lat_vertices,geometry)
+    inpolygon_list = [[],[]]
+    for i in range(slice_lon.start,slice_lon.stop):
+        for j in range(slice_lat.start,slice_lat.stop):
+            grid_tile = Polygon([(lon_vertices[i],lat_vertices[j]),
+                                 (lon_vertices[i],lat_vertices[j+1]),
+                                 (lon_vertices[i+1],lat_vertices[j+1]),
+                                 (lon_vertices[i+1],lat_vertices[j])])
+            if grid_tile.intersects(geometry):
+                inpolygon_list[0].append(i)
+                inpolygon_list[1].append(j)
+    return (np.array(inpolygon_list[0]),np.array(inpolygon_list[1]))
+
+def _inpolygon_from_rectilinear_centroids(lon_centroids, lat_centroids,
+                                          geometry, lon_vertices=None,
+                                          lat_vertices=None):
+    """Find the points from a rectilinear grid defined by its centroids that 
+       fall in a geometry.
+
+    Parameters
+    ----------
+    lon_centroids - numpy array
+    lat_centroids - numpy array
+    geometry - Shapely geometry
+    lon_vertices - numpy array (optional)
+    lat_vertices - numpy array (optional)
+
+    Returns
+    -------
+    out - tuple of numpy arrays
+        The indices of the centroids inside the geometry.
+
+    """
+
+    if (lon_vertices is None) or (lat_vertices is None):
+        f = rectilinear_centroids_to_vertices
+        lon_vertices,lat_vertices = f(lon_centroids,lat_centroids)
+    return _inpolygon_from_rectilinear_vertices(lon_vertices,lat_vertices,
+                                                geometry)
+
+
+def _inpolygon_from_irregular_vertices(lon_vertices, lat_vertices, geometry):
+    """Find the points from an irregular grid defined by its vertices that 
+       fall in a geometry.
+
+    Parameters
+    ----------
+    lon_vertices - numpy array
+    lat_vertices - numpy array
+    geometry - Shapely geometry
+
+    Returns
+    -------
+    out - tuple of numpy arrays
+        The indices of the centroids inside the geometry.
+
+    """
+
+    f = _polygon_grid_subset_from_irregular_vertices
+    (slice1,slice2) = f(lon_vertices,lat_vertices,geometry)
+    inpolygon_list = [[],[]]
+    for i in range(slice1.start,slice1.stop):
+        for j in range(slice2.start,slice2.stop):
+            grid_tile = Polygon([(lon_vertices[i,j],lat_vertices[i,j]),
+                                 (lon_vertices[i,j+1],lat_vertices[i,j+1]),
+                                 (lon_vertices[i+1,j+1],lat_vertices[i+1,j+1]),
+                                 (lon_vertices[i+1,j],lat_vertices[i+1,j])])
+            if grid_tile.intersects(geometry):
+                inpolygon_list[0].append(i)
+                inpolygon_list[1].append(j)
+    return (np.array(inpolygon_list[0]),np.array(inpolygon_list[1]))
+
+
+def _inpolygon_from_irregular_centroids(lon_centroids, lat_centroids, geometry,
+                                        lon_vertices=None, lat_vertices=None):
+    """Find the points from an irregular grid defined by its centroids that 
+       fall in a geometry.
+
+    Parameters
+    ----------
+    lon_centroids - numpy array
+    lat_centroids - numpy array
+    geometry - Shapely geometry
+    lon_vertices - numpy array (optional)
+    lat_vertices - numpy array (optional)
+
+    Returns
+    -------
+    out - tuple of numpy arrays
+        The indices of the centroids inside the geometry.
+
+    """
+
+    if (lon_vertices is None) or (lat_vertices is None):
+        lon_vertices,lat_vertices = ctoqmesh(lon_centroids,lat_centroids)
+    f = _inpolygon_from_irregular_vertices
+    return f(lon_vertices,lat_vertices,geometry)
+
+
+def subdomain_grid_slices_or_points_indices(lon, lat, geometry, grid_type=None,
+                                            lon_dimensions=None,
+                                            lat_dimensions=None):
+    """Find the subset of a given grid such as to cover a given geometry
+
+    Parameters
+    ----------
+    lon - numpy array
+    lat - numpy array
+    geometry - Shapely geometry
+    grid_type - str (optional)
+        The grid type, if None it will be found using detect_grid.
+    lon_dimensions - tuple of str (optional, for detect_grid)
+    lat_dimensions - tuple of str (optional, for detect_grid)
+
+    Returns
+    -------
+    out - usually a tuple of slice, depending on the grid
+        The slices of the subset.
+
+    """
+
+    if grid_type is None:
+        grid_type = detect_grid(lon,lat,lon_dimensions,
+                                lat_dimensions)
+    if grid_type == 'list_of_2d_points':
+        return _inpolygon_from_list_of_points(lon,lat,geometry)
+    elif grid_type == 'rectilinear_2d_centroids':
+        f = _polygon_grid_subset_from_rectilinear_centroids
+        return f(lon,lat,geometry)
+    elif grid_type == 'rectilinear_2d_bounds':
+        f = rectilinear_2d_bounds_to_vertices
+        (lon_vertices,lat_vertices) = f(lon,lat)
+        f = _polygon_grid_subset_from_rectilinear_vertices
+        return f(lon_vertices,lat_vertices,geometry)
+    elif grid_type == 'rectilinear_2d_vertices':
+        f = _polygon_grid_subset_from_rectilinear_vertices
+        return f(lon,lat,geometry)
+    elif grid_type == 'irregular_2d_centroids':
+        f = _polygon_grid_subset_from_irregular_centroids
+        return f(lon,lat,geometry)
+    elif grid_type == 'irregular_2d_vertices':
+        f = _polygon_grid_subset_from_irregular_vertices
+        return f(lon,lat,geometry)
+subdom_slice_or_i = subdomain_grid_slices_or_points_indices
+
+
+def lon_lat_polygon_area(lon_lat_polygon,lon_0=0):
+    """Area of a polygon in lon/lat projection.
+
+    Parameters
+    ----------
+    lon_lat_polygon - Shapely Polygon
+    lon_0 - float
+
+    Returns
+    -------
+    out - float
+        The area of the polygon (in m**2)
+
+    """
+
+    from mpl_toolkits.basemap import Basemap
+
+    m1 = Basemap(projection='moll',lon_0=lon_0)
+    exterior1 = list(lon_lat_polygon.boundary.coords)
+
+    lon1 = []
+    lat1 = []
+    for i in range(len(exterior1)):
+        lon1.append(exterior1[i][0])
+        lat1.append(exterior1[i][1])
+
+    x1,y1 = m1(np.array(lon1),np.array(lat1))
+
+    xys = []
+    for i in range(len(exterior1)):
+        xys.append((x1[i],y1[i]))
+    pol2 = Polygon(xys)
+
+    return pol2.area
+
+
+def spatial_weighted_average(lon_vertices, lat_vertices, geometry, field,
+                             spatial_indices=None):
+    # spatial indices must be specified if field has extra dimensions
+    # there's room for optimisation... iterops the intersections,
+    # check lon_lat_polygon_area performance
+    if len(lon_vertices.shape) == 1:
+        grid_type = 'rectilinear_2d_bounds'
+    else:
+        grid_type = 'irregular_2d_vertices'
+    slices = subdomain_grid_slices_or_points_indices(
+        lon_vertices, lat_vertices, geometry, grid_type)
+    if grid_type == 'rectilinear_2d_bounds':
+        weights = np.zeros([slices[1].stop-slices[1].start,
+                            slices[0].stop-slices[0].start])
+        for i in range(slices[0].start, slices[0].stop):
+            for j in range(slices[1].start, slices[1].stop):
+                pol1 = Polygon([(lon_vertices[i], lat_vertices[j]),
+                                (lon_vertices[i+1], lat_vertices[j]),
+                                (lon_vertices[i+1], lat_vertices[j+1]),
+                                (lon_vertices[i], lat_vertices[j+1])])
+                cell_area = lon_lat_polygon_area(pol1)
+                area = lon_lat_polygon_area(pol1.intersection(geometry))
+                weights[j,i] = area/float(cell_area)
+    elif grid_type == 'irregular_2d_vertices':
+        weights = np.zeros([slices[0].stop-slices[0].start,
+                            slices[1].stop-slices[1].start])
+        for i in range(slices[0].start, slices[0].stop):
+            for j in range(slices[1].start, slices[1].stop):
+                pol1 = Polygon([(lon_vertices[i,j], lat_vertices[i,j]),
+                                (lon_vertices[i+1,j], lat_vertices[i+1,j]),
+                                (lon_vertices[i+1,j+1], lat_vertices[i+1,j+1]),
+                                (lon_vertices[i,j+1], lat_vertices[i,j+1])])
+                cell_area = lon_lat_polygon_area(pol1)
+                intersection = pol1.intersection(geometry)
+                if isinstance(intersection, LineString):
+                    area = 0
+                elif isinstance(intersection, Point):
+                    area = 0
+                else:
+                    area = lon_lat_polygon_area(intersection)
+                weights[i,j] = area/float(cell_area)
+    weights = weights/weights.sum()
+    if spatial_indices:
+        if grid_type == 'rectilinear_2d_bounds':
+            x = 1
+        else:
+            x = 0
+        field_slices = []
+        for i in range(len(field.shape)):
+            if i in spatial_indices:
+                field_slices.append(slices[x])
+                if grid_type == 'rectilinear_2d_bounds':
+                    x -= 1
+                else:
+                    x += 1
+            else:
+                field_slices.append(slice(None))
+        field = field[field_slices]
+        reps = []
+        for i in range(len(field.shape)):
+            if i in spatial_indices:
+                reps.append(1)
+            else:
+                reps.append(field.shape[i])
+        weights = np.tile(weights, reps)
+        weighted_average_field = (field*weights)
+        for i in reversed(sorted(spatial_indices)):
+            weighted_average_field = weighted_average_field.sum(i)
+    else:
+        if grid_type == 'rectilinear_2d_bounds':
+            field = field[slices[1],slices[0]]
+        else:
+            field = field[slices[0],slices[1]]
+        weighted_average_field = (field*weights).sum()
+    return weighted_average_field

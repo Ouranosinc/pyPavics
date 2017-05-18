@@ -329,6 +329,90 @@ class TestGeogrid(unittest.TestCase):
         self.assertEqual(lat_vertices[2], 4.5)
         self.assertEqual(lat_vertices[3], 0)
 
+    def test_spatial_weighted_average_01(self):
+        mylon = np.array([[0, 4, 8, 12, 16, 20, 24],
+                          [2, 6, 10, 14, 18, 22, 26],
+                          [4, 8, 12, 16, 20, 24, 28],
+                          [6, 10, 14, 18, 22, 26, 30],
+                          [8, 12, 16, 20, 24, 28, 32],
+                          [10, 14, 18, 22, 26, 30, 34]])
+        mylat = np.array([[0, 1, 2, 3, 4, 5, 6],
+                          [4, 5, 6, 7, 8, 9, 10],
+                          [8, 9, 10, 11, 12, 13, 14],
+                          [12, 13, 14, 15, 16, 17, 18],
+                          [16, 17, 18, 19, 20, 21, 22],
+                          [20, 21, 22, 23, 24, 25, 26]])
+        geometry = Polygon([(0, 0),
+                            (2, 4),
+                            (6, 5),
+                            (4, 1)])
+        field = np.array([[0, 1, 2, 3, 4, 5],
+                          [10, 11, 12, 13, 14, 15],
+                          [20, 21, 22, 23, 24, 25],
+                          [30, 31, 32, 33, 34, 35],
+                          [40, 41, 42, 43, 44, 45]])
+        wa = geogrid.spatial_weighted_average(mylon, mylat, geometry,
+                                              field, spatial_indices=None)
+        self.assertEqual(wa, 0)
+
+    def test_spatial_weighted_average_02(self):
+        mylon = np.array([[0, 4, 8, 12, 16, 20, 24],
+                          [2, 6, 10, 14, 18, 22, 26],
+                          [4, 8, 12, 16, 20, 24, 28],
+                          [6, 10, 14, 18, 22, 26, 30],
+                          [8, 12, 16, 20, 24, 28, 32],
+                          [10, 14, 18, 22, 26, 30, 34]])
+        mylat = np.array([[0, 1, 2, 3, 4, 5, 6],
+                          [4, 5, 6, 7, 8, 9, 10],
+                          [8, 9, 10, 11, 12, 13, 14],
+                          [12, 13, 14, 15, 16, 17, 18],
+                          [16, 17, 18, 19, 20, 21, 22],
+                          [20, 21, 22, 23, 24, 25, 26]])
+        geometry = Polygon([(0, 0),
+                            (2, 4),
+                            (10, 6),
+                            (8, 2)])
+        field = np.array([[0, 1, 2, 3, 4, 5],
+                          [10, 11, 12, 13, 14, 15],
+                          [20, 21, 22, 23, 24, 25],
+                          [30, 31, 32, 33, 34, 35],
+                          [40, 41, 42, 43, 44, 45]])
+        wa = geogrid.spatial_weighted_average(mylon, mylat, geometry,
+                                              field, spatial_indices=None)
+        self.assertEqual(wa, 0.5)
+
+    def test_spatial_weighted_average_03(self):
+        mylon = np.array([[0, 4, 8, 12, 16, 20, 24],
+                          [2, 6, 10, 14, 18, 22, 26],
+                          [4, 8, 12, 16, 20, 24, 28],
+                          [6, 10, 14, 18, 22, 26, 30],
+                          [8, 12, 16, 20, 24, 28, 32],
+                          [10, 14, 18, 22, 26, 30, 34]])
+        mylat = np.array([[0, 1, 2, 3, 4, 5, 6],
+                          [4, 5, 6, 7, 8, 9, 10],
+                          [8, 9, 10, 11, 12, 13, 14],
+                          [12, 13, 14, 15, 16, 17, 18],
+                          [16, 17, 18, 19, 20, 21, 22],
+                          [20, 21, 22, 23, 24, 25, 26]])
+        geometry = Polygon([(0, 0),
+                            (2, 4),
+                            (10, 6),
+                            (8, 2)])
+        field = np.array([[[0, 1, 2, 3, 4, 5],
+                           [10, 11, 12, 13, 14, 15],
+                           [20, 21, 22, 23, 24, 25],
+                           [30, 31, 32, 33, 34, 35],
+                           [40, 41, 42, 43, 44, 45]],
+                          [[0, -1, -2, -3, -4, -5],
+                           [-10, -11, -12, -13, -14, -15],
+                           [-20, -21, -22, -23, -24, -25],
+                           [-30, -31, -32, -33, -34, -35],
+                           [-40, -41, -42, -43, -44, -45]]])
+        wa = geogrid.spatial_weighted_average(mylon, mylat, geometry,
+                                              field, spatial_indices=[1,2])
+        self.assertEqual(wa[0], 0.5)
+        self.assertEqual(wa[1], -0.5)
+
 suite = unittest.TestLoader().loadTestsFromTestCase(TestGeogrid)
 
 if __name__ == '__main__':

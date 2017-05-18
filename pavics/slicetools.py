@@ -195,8 +195,10 @@ def divide_slices(shape, divisions, slices=None, dimensions=None):
 
 def divide_slices_for_memory_fit(shape, dtype, slices=None, dimensions=None,
                                  memory_size=2000000000,
-                                 divide_dimension=None):
+                                 divide_dimension=None,
+                                 raise_shortcoming=True):
     """Divide slices to fit in memory.
+
     Parameters
     ----------
     shape - tuple of int
@@ -208,14 +210,14 @@ def divide_slices_for_memory_fit(shape, dtype, slices=None, dimensions=None,
         using the name of a the dimensions can be used.
     dimensions - list of str
     memory_size - int
-    divide_dimension - int or list of int/str
-        if just a number, this is the index of the dimension that will be
-        divided; if a list of numbers/strings is provided, they correspond to
-        multiple candidate dimensions for splitting, with priority going
-        to the first one provided.
+    divide_dimension - list of int/str
+        This correspond to multiple candidate dimensions for splitting,
+        with priority going to the first one provided.
+
     Returns
     -------
     out - list of tuple of slices
+
     Examples
     --------
     >>> divide_slices_for_memory_fit((365,360,179), np.float32,
@@ -227,6 +229,7 @@ def divide_slices_for_memory_fit(shape, dtype, slices=None, dimensions=None,
      (slice(0, 365, 1), slice(144, 216, 1), slice(0, 179, 1)),
      (slice(0, 365, 1), slice(216, 288, 1), slice(0, 179, 1)),
      (slice(0, 365, 1), slice(288, 360, 1), slice(0, 179, 1))]
+
     """
 
     if slices is None:
@@ -277,10 +280,12 @@ def divide_slices_for_memory_fit(shape, dtype, slices=None, dimensions=None,
                     n += shape[i]
         num_divisions = _num_divisions_for_memory_fit(n, dtype, memory_size)
     if divide_dimension is None:
-        return divide_slices(shape, num_divisions, slices, dimensions)
+        divided_slices = divide_slices(shape, num_divisions, slices,
+                                       dimensions)
     elif isinstance(divide_dimension, basestring):
-        return divide_slices(shape, {divide_dimension: num_divisions}, slices,
-                             dimensions)
+        divided_slices = divide_slices(shape,
+                                       {divide_dimension: num_divisions},
+                                       slices, dimensions)
     elif isinstance(divide_dimension, list):
         divisions_list = [1]*len(shape)
         valid_divs = []
@@ -296,4 +301,8 @@ def divide_slices_for_memory_fit(shape, dtype, slices=None, dimensions=None,
             else:
                 divisions_list[valid_div] = shape[valid_div]
                 num_divisions = np.ceil(num_divisions/shape[valid_div])
-        return divide_slices(shape, divisions_list, slices, dimensions)
+        divided_slices = divide_slices(shape, divisions_list, slices,
+                                       dimensions)
+    if raise_shortcoming and len(divided_slices) < num_divisions:
+        raise SliceError("Could not divide slices to fit in memory.")
+    return divided_slices
