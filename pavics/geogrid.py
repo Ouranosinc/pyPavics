@@ -1,7 +1,9 @@
 import logging
+import copy
 
 import numpy as np
-from shapely.geometry import Point, Polygon, LineString
+from shapely.geometry import Point, LineString, Polygon, MultiPoint,\
+                             MultiLineString, MultiPolygon, GeometryCollection
 from shapely import iterops
 from shapely.ops import cascaded_union
 
@@ -113,6 +115,39 @@ def detect_grid(lon, lat, lon_dimensions=None, lat_dimensions=None):
             elif lon.size == lat.size:
                 return 'list_of_2d_points'
     raise GeogridError("Unknown grid.")
+
+
+def grid_fix_longitudes(longitudes, warp_longitude):
+    """Constrain longitudes to the 360 degrees below a given longitude.
+
+    Parameters
+    ----------
+    longitudes - numpy array
+    warp_longitude - float
+
+    Returns
+    -------
+    out - numpy array
+
+    Examples
+    --------
+    To return longitudes between 0 and 360:
+    >> grid_fix_longitudes(longitudes,360.0)
+
+    To return longitudes between -180 and 180:
+    >> grid_fix_longitudes(longitudes,180.0)
+
+    """
+
+    over_warp = longitudes >= warp_longitude
+    while over_warp.sum() > 0:
+        longitudes = longitudes-360.0*over_warp
+        over_warp = longitudes >= warp_longitude
+    under_warp = longitudes < warp_longitude-360.0
+    while under_warp.sum() > 0:
+        longitudes = longitudes+360.0*under_warp
+        under_warp = longitudes < warp_longitude-360.0
+    return longitudes
 
 
 def rectilinear_centroids_to_vertices(x, y, forced_bounds=False,
@@ -822,6 +857,7 @@ def _inpolygon_from_list_of_points(lon_points, lat_points, geometry):
             valid_indices.append(i)
     return valid_indices
 
+
 def _inpolygon_from_rectilinear_vertices(lon_vertices, lat_vertices, geometry):
     """Find the points from a rectilinear grid defined by its vertices that 
        fall in a geometry.
@@ -853,10 +889,11 @@ def _inpolygon_from_rectilinear_vertices(lon_vertices, lat_vertices, geometry):
                 inpolygon_list[1].append(j)
     return (np.array(inpolygon_list[0]),np.array(inpolygon_list[1]))
 
+
 def _inpolygon_from_rectilinear_centroids(lon_centroids, lat_centroids,
                                           geometry, lon_vertices=None,
                                           lat_vertices=None):
-    """Find the points from a rectilinear grid defined by its centroids that 
+    """Find the points from a rectilinear grid defined by its centroids that
        fall in a geometry.
 
     Parameters
@@ -915,7 +952,7 @@ def _inpolygon_from_irregular_vertices(lon_vertices, lat_vertices, geometry):
 
 def _inpolygon_from_irregular_centroids(lon_centroids, lat_centroids, geometry,
                                         lon_vertices=None, lat_vertices=None):
-    """Find the points from an irregular grid defined by its centroids that 
+    """Find the points from an irregular grid defined by its centroids that
        fall in a geometry.
 
     Parameters
@@ -986,7 +1023,25 @@ def subdomain_grid_slices_or_points_indices(lon, lat, geometry, grid_type=None,
 subdom_slice_or_i = subdomain_grid_slices_or_points_indices
 
 
-def lon_lat_polygon_area(lon_lat_polygon,lon_0=0):
+def expand_polygon(polygon, n=1):
+    # add more vertices to a polygon
+    while n:
+        exterior1 = list(polygon.boundary.coords)
+
+        lon1 = []
+        lat1 = []
+        xys = []
+        for i in range(len(exterior1)-1):
+            xys.append((exterior1[i][0], exterior1[i][1]))
+            xys.append(((exterior1[i][0]+exterior1[i+1][0])/2.0,
+                        (exterior1[i][1]+exterior1[i+1][1])/2.0))
+        xys.append((exterior1[-1][0], exterior1[-1][1]))
+        polygon = Polygon(xys)
+        n -= 1
+    return polygon
+
+
+def lon_lat_polygon_area(lon_lat_polygon,lon_0=None):
     """Area of a polygon in lon/lat projection.
 
     Parameters
@@ -1003,6 +1058,8 @@ def lon_lat_polygon_area(lon_lat_polygon,lon_0=0):
 
     from mpl_toolkits.basemap import Basemap
 
+    if lon_0 is None:
+        lon_0 = lon_lat_polygon.centroid.x
     m1 = Basemap(projection='moll',lon_0=lon_0)
     exterior1 = list(lon_lat_polygon.boundary.coords)
 
@@ -1042,9 +1099,25 @@ def spatial_weighted_average(lon_vertices, lat_vertices, geometry, field,
                                 (lon_vertices[i+1], lat_vertices[j]),
                                 (lon_vertices[i+1], lat_vertices[j+1]),
                                 (lon_vertices[i], lat_vertices[j+1])])
-                cell_area = lon_lat_polygon_area(pol1)
-                area = lon_lat_polygon_area(pol1.intersection(geometry))
-                weights[j,i] = area/float(cell_area)
+                # adding vertices to polygon in case it's a large grid
+                cell_area = lon_lat_polygon_area(expand_polygon(pol1,5))
+                intersection = pol1.intersection(geometry)
+                if isinstance(intersection, LineString):
+                    area = 0
+                elif isinstance(intersection, Point):
+                    area = 0
+                elif isinstance(intersection, GeometryCollection):
+                    if len(intersection) == 0:
+                        # empty geometry collection
+                        area = 0
+                    else:
+                        # what would that be?
+                        raise NotImplementedError()
+                else:
+                    area = lon_lat_polygon_area(expand_polygon(intersection,5))
+                it = i-slices[0].start
+                jt = j-slices[1].start
+                weights[jt,it] = area/float(cell_area)
     elif grid_type == 'irregular_2d_vertices':
         weights = np.zeros([slices[0].stop-slices[0].start,
                             slices[1].stop-slices[1].start])
@@ -1054,15 +1127,25 @@ def spatial_weighted_average(lon_vertices, lat_vertices, geometry, field,
                                 (lon_vertices[i+1,j], lat_vertices[i+1,j]),
                                 (lon_vertices[i+1,j+1], lat_vertices[i+1,j+1]),
                                 (lon_vertices[i,j+1], lat_vertices[i,j+1])])
-                cell_area = lon_lat_polygon_area(pol1)
+                # adding vertices to polygon in case it's a large grid
+                cell_area = lon_lat_polygon_area(expand_polygon(pol1,5))
                 intersection = pol1.intersection(geometry)
                 if isinstance(intersection, LineString):
                     area = 0
                 elif isinstance(intersection, Point):
                     area = 0
+                elif isinstance(intersection, GeometryCollection):
+                    if len(intersection) == 0:
+                        # empty geometry collection
+                        area = 0
+                    else:
+                        # what would that be?
+                        raise NotImplementedError()
                 else:
-                    area = lon_lat_polygon_area(intersection)
-                weights[i,j] = area/float(cell_area)
+                    area = lon_lat_polygon_area(expand_polygon(intersection,5))
+                it = i-slices[0].start
+                jt = j-slices[1].start
+                weights[it,jt] = area/float(cell_area)
     weights = weights/weights.sum()
     if spatial_indices:
         if grid_type == 'rectilinear_2d_vertices':
@@ -1097,3 +1180,61 @@ def spatial_weighted_average(lon_vertices, lat_vertices, geometry, field,
             field = field[slices[0],slices[1]]
         weighted_average_field = (field*weights).sum()
     return weighted_average_field
+
+
+def shapely_fix_longitudes(geometry,warp_longitude):
+    """Constrain longitudes of a shapely geometry.
+
+    Parameters
+    ----------
+    geometry - Shapely geometry
+    warp_longitude - float
+
+    Returns
+    -------
+    out - Shapely geometry
+
+    """
+
+    if isinstance(geometry,Point):
+        new_x = grid_fix_longitudes(np.array([geometry.x]),warp_longitude)
+        if geometry.has_z:
+            return Point(new_x,geometry.y,geometry.z)
+        else:
+            return Point(new_x,geometry.y)
+    elif isinstance(geometry,LineString):
+        coords = np.asarray(geometry)
+        coords[:,0] = grid_fix_longitudes(coords[:,0],warp_longitude)
+        return LineString(coords)
+    elif isinstance(geometry,Polygon):
+        coords = np.asarray(geometry.exterior)
+        coords[:,0] = grid_fix_longitudes(coords[:,0],warp_longitude)
+        new_interiors = []
+        for interior in geometry.interiors:
+            new_interiors.append(np.asarray(interior))
+            new_interiors[-1][:,0] = grid_fix_longitudes(
+                new_interiors[-1][:,0], warp_longitude)
+        return Polygon(coords,new_interiors)
+    elif isinstance(geometry,MultiPoint):
+        coords = np.asarray(geometry)
+        coords[:,0] = grid_fix_longitudes(coords[:,0],warp_longitude)
+        return MultiPoint(coords)
+    elif isinstance(geometry,MultiLineString):
+        new_geom = []
+        for linestring in geometry.geoms:
+            new_geom.append(np.asarray(linestring))
+            new_geom[-1][:,0] = grid_fix_longitudes(new_geom[-1][:,0],
+                                                    warp_longitude)
+        return MultiLineString(new_geom)
+    elif isinstance(geometry,MultiPolygon):
+        new_geom = []
+        for polygon in geometry.geoms:
+            coords = np.asarray(polygon.exterior)
+            coords[:,0] = grid_fix_longitudes(coords[:,0],warp_longitude)
+            new_in = []
+            for interior in polygon.interiors:
+                new_in.append(np.asarray(interior))
+                new_in[-1][:,0] = grid_fix_longitudes(new_in[-1][:,0],
+                                                      warp_longitude)
+            new_geom.append((copy.deepcopy(coords),copy.deepcopy(new_in)))
+        return MultiPolygon(new_geom)

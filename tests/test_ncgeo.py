@@ -469,12 +469,111 @@ class TestNcGeo(unittest.TestCase):
         self.assertEqual(nclon.size, 1)
         self.assertEqual(nclat.size, 1)
         self.assertEqual(nclon[0], 105)
-        #self.assertEqual(nclon[-1], 140)
         self.assertEqual(nclat[0], -9)
-        #self.assertEqual(nclat[-1], 40)
         self.assertEqual(ncvar.shape, (1, 1))
         self.assertEqual(ncvar[0,0], 203)
-        #self.assertEqual(ncvar[-1,-1], 34)
+
+    def test_spatial_weighted_average_02(self):
+        # regular centroids 0-360
+        pavnc.create_dummy_netcdf(
+            self.dummy_file_1, use_time=False, lat_size=6, lon_size=12,
+            lon_values=[15, 45, 75, 105, 135, 165, 195, 225, 255, 285, 315,
+                        345],
+            lat_values=[-75, -45, -15, 15, 45, 75],
+            var_values=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                        [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+                         111],
+                        [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                         211],
+                        [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310,
+                         311],
+                        [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410,
+                         411],
+                        [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+                         511]])
+        geometry = Polygon([(180, -30), (180, 30), (210, 60), (240, 30),
+                            (240, -30)])
+        ncgeo.spatial_weighted_average(self.dummy_file_1, self.dummy_file_2,
+                                       geometry)
+        nc = netCDF4.Dataset(self.dummy_file_2, 'r')
+        nclon = nc.variables['lon']
+        nclat = nc.variables['lat']
+        ncvar = nc.variables['dummy']
+        self.assertEqual(nclon.size, 1)
+        self.assertEqual(nclat.size, 1)
+        self.assertEqual(nclon[0], 210)
+        self.assertEqual(nclat[0], 8.0)
+        self.assertEqual(ncvar.shape, (1, 1))
+        self.assertAlmostEqual(ncvar[0,0], 286.5, delta=3)
+
+    def test_spatial_weighted_average_03(self):
+        # regular centroids 0-360
+        # polygon with a different reference system
+        pavnc.create_dummy_netcdf(
+            self.dummy_file_1, use_time=False, lat_size=6, lon_size=12,
+            lon_values=[15, 45, 75, 105, 135, 165, 195, 225, 255, 285, 315,
+                        345],
+            lat_values=[-75, -45, -15, 15, 45, 75],
+            var_values=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                        [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+                         111],
+                        [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                         211],
+                        [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310,
+                         311],
+                        [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410,
+                         411],
+                        [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+                         511]])
+        geometry = Polygon([(-180, -30), (-180, 30), (-150, 60), (-120, 30),
+                            (-120, -30)])
+        ncgeo.spatial_weighted_average(self.dummy_file_1, self.dummy_file_2,
+                                       geometry)
+        nc = netCDF4.Dataset(self.dummy_file_2, 'r')
+        nclon = nc.variables['lon']
+        nclat = nc.variables['lat']
+        ncvar = nc.variables['dummy']
+        self.assertEqual(nclon.size, 1)
+        self.assertEqual(nclat.size, 1)
+        self.assertEqual(nclon[0], 210)
+        self.assertEqual(nclat[0], 8.0)
+        self.assertEqual(ncvar.shape, (1, 1))
+        self.assertAlmostEqual(ncvar[0,0], 286.5, delta=3)
+
+    def test_spatial_weighted_average_04(self):
+        # irregular centroids 0-360
+        mylon = np.array([[3, 7, 11, 15, 19, 23],
+                          [5, 9, 13, 17, 21, 25],
+                          [7, 11, 15, 19, 23, 27],
+                          [9, 13, 17, 21, 25, 29],
+                          [11, 15, 19, 23, 27, 31]])
+        mylat = np.array([[2.5, 3.5, 4.5, 5.5, 6.5, 7.5],
+                          [6.5, 7.5, 8.5, 9.5, 10.5, 11.5],
+                          [10.5, 11.5, 12.5, 13.5, 14.5, 16.5],
+                          [14.5, 15.5, 16.5, 17.5, 18.5, 19.5],
+                          [18.5, 19.5, 20.5, 21.5, 22.5, 23.5]])
+        pavnc.create_dummy_netcdf(
+            self.dummy_file_1, use_time=False, use_lat=False, use_lon=False,
+            use_ycxc=True, yc_size=5, xc_size=6,
+            lon_values=mylon, lat_values=mylat,
+            var_values=[[0, 1, 2, 3, 4, 5],
+                        [10, 11, 12, 13, 14, 15],
+                        [20, 21, 22, 23, 24, 25],
+                        [30, 31, 32, 33, 34, 35],
+                        [40, 41, 42, 43, 44, 45]])
+        geometry = Polygon([(17, 10), (17, 16), (21, 16), (21, 10)])
+        ncgeo.spatial_weighted_average(self.dummy_file_1, self.dummy_file_2,
+                                       geometry)
+        nc = netCDF4.Dataset(self.dummy_file_2, 'r')
+        nclon = nc.variables['lon']
+        nclat = nc.variables['lat']
+        ncvar = nc.variables['dummy']
+        self.assertEqual(nclon.size, 1)
+        self.assertEqual(nclat.size, 1)
+        self.assertEqual(nclon[0], 19)
+        self.assertEqual(nclat[0], 13)
+        self.assertEqual(ncvar.shape, (1, 1))
+        self.assertAlmostEqual(ncvar[0,0], 21.4, delta=0.2)
 
 suite = unittest.TestLoader().loadTestsFromTestCase(TestNcGeo)
 

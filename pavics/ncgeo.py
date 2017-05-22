@@ -85,18 +85,37 @@ def reshape_subdomain(nclon, nclat, geometry, slices=None):
         slices = geogrid.subdomain_grid_slices_or_points_indices(
             nclon[...], nclat[...], geometry, lon_dimensions=nclon.dimensions,
             lat_dimensions=nclat.dimensions)
-    print(slices)
     reshapes = {}
     for i, lon_dimension in enumerate(nclon.dimensions):
         if isinstance(slices[i], slice):
-            reshapes[lon_dimension] = slices[i].stop-slices[i].start
+            reshapes[lon_dimension] = slices[i].stop - slices[i].start
         else:
             reshapes[lon_dimension] = len(slices)
     i += 1
     for j, lat_dimension in enumerate(nclat.dimensions):
         if lat_dimension not in reshapes:
-            reshapes[lat_dimension] = slices[j+i].stop-slices[j+i].start
+            reshapes[lat_dimension] = slices[j+i].stop - slices[j+i].start
     return reshapes
+
+
+def find_warp_longitude(grid_lon, geometry):
+    # maybe this should be moved to geogrid.py
+    dc = (360-(grid_lon.max()-grid_lon.min()))/2.0
+    if dc == 0:
+        # grid goes around the world more than once...
+        raise geogrid.GeogridError("Longitude range >= 360")
+    warp_lon = grid_lon.max() + dc
+    geogrid.grid_fix_longitudes(grid_lon, warp_lon)
+    original_centroid = geometry.centroid
+    fixcentroid = geogrid.shapely_fix_longitudes(original_centroid, warp_lon)
+    fixgeo = geogrid.shapely_fix_longitudes(geometry, warp_lon)
+    newcentroid = fixgeo.centroid
+    if fixcentroid != newcentroid:
+        print(original_centroid)
+        print(fixcentroid)
+        print(newcentroid)
+        raise geogrid.GeogridError("Polygon crosses grid limit?")
+    return warp_lon
 
 
 def subset_polygon(nc_resource, out_file, geometry, history_msg=None):
@@ -120,8 +139,12 @@ def subset_polygon(nc_resource, out_file, geometry, history_msg=None):
     # I need to reshape the spatial dimensions
     ncreflon = nc_reference.variables['lon']
     ncreflat = nc_reference.variables['lat']
+    # Make sure we have continuous longitudes and proper reference system
+    warp_lon = find_warp_longitude(ncreflon[...], geometry)
+    fixlon = geogrid.grid_fix_longitudes(ncreflon[...], warp_lon)
+    fixgeo = geogrid.shapely_fix_longitudes(geometry, warp_lon)
     slices = geogrid.subdomain_grid_slices_or_points_indices(
-        ncreflon[...], ncreflat[...], geometry,
+        fixlon, ncreflat[...], fixgeo,
         lon_dimensions=ncreflon.dimensions, lat_dimensions=ncreflat.dimensions)
     reshapes = reshape_subdomain(ncreflon, ncreflat, geometry, slices)
     pavnc.nc_copy_dimensions(nc_reference, nc_output,
@@ -138,7 +161,7 @@ def subset_polygon(nc_resource, out_file, geometry, history_msg=None):
                                       renames={},
                                       new_dtype={},
                                       new_dimensions={},
-                                      create_args={'_global': {'zlib':True}})
+                                      create_args={'_global': {'zlib': True}})
 
     pavnc.nc_copy_variables_attributes(nc_reference, nc_output,
                                        includes=[],
@@ -207,9 +230,9 @@ def spatial_weighted_average(nc_resource, out_file, geometry,
     # I need to reshape the spatial dimensions
     ncreflon = nc_reference.variables['lon']
     ncreflat = nc_reference.variables['lat']
-    slices = geogrid.subdomain_grid_slices_or_points_indices(
-        ncreflon[...], ncreflat[...], geometry,
-        lon_dimensions=ncreflon.dimensions, lat_dimensions=ncreflat.dimensions)
+    warp_lon = find_warp_longitude(ncreflon[...], geometry)
+    fixlon = geogrid.grid_fix_longitudes(ncreflon[...], warp_lon)
+    fixgeo = geogrid.shapely_fix_longitudes(geometry, warp_lon)
     spatial_info = spatial_dimensions(nc_reference)
     reshapes = {}
     for dim in spatial_info['spatial_dims']:
@@ -228,7 +251,7 @@ def spatial_weighted_average(nc_resource, out_file, geometry,
                                       renames={},
                                       new_dtype={},
                                       new_dimensions={},
-                                      create_args={'_global': {'zlib':True}})
+                                      create_args={'_global': {'zlib': True}})
 
     pavnc.nc_copy_variables_attributes(nc_reference, nc_output,
                                        includes=[],
@@ -244,16 +267,16 @@ def spatial_weighted_average(nc_resource, out_file, geometry,
 
     nclon = nc_output.variables['lon']
     nclat = nc_output.variables['lat']
-    nclon[...] = geometry.centroid.x
-    nclat[...] = geometry.centroid.y
+    nclon[...] = fixgeo.centroid.x
+    nclat[...] = fixgeo.centroid.y
     # here we could set lon/lat vertices with bnds in NetCDF file if they
     # exist...
     if len(ncreflon.shape) == 1:
         (lonv, latv) = geogrid.rectilinear_centroids_to_vertices(
-            ncreflon[:], ncreflat[:])
+            fixlon, ncreflat[:])
     else:
         (lonv, latv) = geogrid.centroids_to_quadrilaterals_mesh(
-            ncreflon[:,:], ncreflat[:,:])
+            fixlon, ncreflat[:,:])
     for var_name in spatial_info['spatial_vars']:
         if var_name in ['lon', 'lat']:
             continue
@@ -266,11 +289,8 @@ def spatial_weighted_average(nc_resource, out_file, geometry,
                 spatial_indices.append(i)
         if len(current_spatial_dims) == len(spatial_info['spatial_dims']):
             ncvar = nc_output.variables[var_name]
-            # what if its too large for memory?
-            # ncvar[...] = ncrefvar[ref_slices] some operation for weighted
-            # averaging
             ncvar[...] = geogrid.spatial_weighted_average(
-                lonv, latv, geometry, ncrefvar[...], spatial_indices)
+                lonv, latv, fixgeo, ncrefvar, spatial_indices)
 
     nc_reference.close()
     nc_output.close()
