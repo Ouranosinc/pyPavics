@@ -380,7 +380,7 @@ def nc_copy_attrs(nc_source, nc_destination, includes=[], excludes=[],
                 append_attr = appends[attribute].encode('latin-1')
             except (AttributeError, UnicodeEncodeError):
                 append_attr = appends[attribute]
-            new_attr = warp + '\n' + append_attr
+            new_attr = str(warp) + '\n' + str(append_attr)
             nc_destination.__setattr__(attribute, new_attr)
         else:
             # hack for bypassing unicode bug

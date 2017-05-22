@@ -304,6 +304,178 @@ class TestNcGeo(unittest.TestCase):
         self.assertEqual(ncvar[0,0], 12)
         self.assertEqual(ncvar[2,2], 34)
 
+    def test_subset_bbox_04(self):
+        # regular centroids 0-360
+        pavnc.create_dummy_netcdf(
+            self.dummy_file_1, use_time=False, lat_size=6, lon_size=12,
+            lon_values=[15, 45, 75, 105, 135, 165, 195, 225, 255, 285, 315,
+                        345],
+            lat_values=[-75, -45, -15, 15, 45, 75],
+            var_values=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                        [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+                         111],
+                        [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                         211],
+                        [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310,
+                         311],
+                        [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410,
+                         411],
+                        [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+                         511]])
+        ncgeo.subset_bbox(self.dummy_file_1, self.dummy_file_2,
+                          [92, -28, 93, -27])
+        nc = netCDF4.Dataset(self.dummy_file_2, 'r')
+        nclon = nc.variables['lon']
+        nclat = nc.variables['lat']
+        ncvar = nc.variables['dummy']
+        self.assertEqual(nclon.size, 1)
+        self.assertEqual(nclat.size, 1)
+        self.assertEqual(nclon[0], 105)
+        #self.assertEqual(nclon[-1], 140)
+        self.assertEqual(nclat[0], -15)
+        #self.assertEqual(nclat[-1], 40)
+        self.assertEqual(ncvar.shape, (1, 1))
+        self.assertEqual(ncvar[0,0], 203)
+        #self.assertEqual(ncvar[-1,-1], 34)
+
+    def test_subset_bbox_05(self):
+        # regular centroids 0-360
+        pavnc.create_dummy_netcdf(
+            self.dummy_file_1, use_time=False, lat_size=6, lon_size=12,
+            lon_values=[15, 45, 75, 105, 135, 165, 195, 225, 255, 285, 315,
+                        345],
+            lat_values=[-75, -45, -15, 15, 45, 75],
+            var_values=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                        [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+                         111],
+                        [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                         211],
+                        [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310,
+                         311],
+                        [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410,
+                         411],
+                        [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+                         511]])
+        ncgeo.subset_bbox(self.dummy_file_1, self.dummy_file_2,
+                          [92, -28, 118, -7])
+        nc = netCDF4.Dataset(self.dummy_file_2, 'r')
+        nclon = nc.variables['lon']
+        nclat = nc.variables['lat']
+        ncvar = nc.variables['dummy']
+        self.assertEqual(nclon.size, 1)
+        self.assertEqual(nclat.size, 1)
+        self.assertEqual(nclon[0], 105)
+        #self.assertEqual(nclon[-1], 140)
+        self.assertEqual(nclat[0], -15)
+        #self.assertEqual(nclat[-1], 40)
+        self.assertEqual(ncvar.shape, (1, 1))
+        self.assertEqual(ncvar[0,0], 203)
+        #self.assertEqual(ncvar[-1,-1], 34)
+
+    def test_subset_bbox_06(self):
+        # regular centroids 0-360
+        pavnc.create_dummy_netcdf(
+            self.dummy_file_1, use_time=False, lat_size=6, lon_size=12,
+            lon_values=[15, 45, 75, 105, 135, 165, 195, 225, 255, 285, 315,
+                        345],
+            lat_values=[-75, -45, -15, 15, 45, 75],
+            var_values=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                        [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+                         111],
+                        [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                         211],
+                        [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310,
+                         311],
+                        [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410,
+                         411],
+                        [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+                         511]])
+        ncgeo.subset_bbox(self.dummy_file_1, self.dummy_file_2,
+                          [92, -28, 130, -7])
+        nc = netCDF4.Dataset(self.dummy_file_2, 'r')
+        nclon = nc.variables['lon']
+        nclat = nc.variables['lat']
+        ncvar = nc.variables['dummy']
+        self.assertEqual(nclon.size, 2)
+        self.assertEqual(nclat.size, 1)
+        self.assertEqual(nclon[0], 105)
+        self.assertEqual(nclon[-1], 135)
+        self.assertEqual(nclat[0], -15)
+        self.assertEqual(nclat[-1], -15)
+        self.assertEqual(ncvar.shape, (1, 2))
+        self.assertEqual(ncvar[0,0], 203)
+        self.assertEqual(ncvar[-1,-1], 204)
+
+    def test_subset_bbox_07(self):
+        # regular centroids 0-360
+        # polygon with a different reference system
+        pavnc.create_dummy_netcdf(
+            self.dummy_file_1, use_time=False, lat_size=6, lon_size=12,
+            lon_values=[15, 45, 75, 105, 135, 165, 195, 225, 255, 285, 315,
+                        345],
+            lat_values=[-75, -45, -15, 15, 45, 75],
+            var_values=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                        [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+                         111],
+                        [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                         211],
+                        [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310,
+                         311],
+                        [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410,
+                         411],
+                        [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+                         511]])
+        ncgeo.subset_bbox(self.dummy_file_1, self.dummy_file_2,
+                          [-88, -28, -3, -7])
+        nc = netCDF4.Dataset(self.dummy_file_2, 'r')
+        nclon = nc.variables['lon']
+        nclat = nc.variables['lat']
+        ncvar = nc.variables['dummy']
+        self.assertEqual(nclon.size, 3)
+        self.assertEqual(nclat.size, 1)
+        self.assertEqual(nclon[0], 285)
+        self.assertEqual(nclon[-1], 345)
+        self.assertEqual(nclat[0], -15)
+        self.assertEqual(nclat[-1], -15)
+        self.assertEqual(ncvar.shape, (1, 3))
+        self.assertEqual(ncvar[0,0], 209)
+        self.assertEqual(ncvar[-1,-1], 211)
+
+    def test_spatial_weighted_average_01(self):
+        # regular centroids 0-360
+        pavnc.create_dummy_netcdf(
+            self.dummy_file_1, use_time=False, lat_size=6, lon_size=12,
+            lon_values=[15, 45, 75, 105, 135, 165, 195, 225, 255, 285, 315,
+                        345],
+            lat_values=[-75, -45, -15, 15, 45, 75],
+            var_values=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                        [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
+                         111],
+                        [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                         211],
+                        [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310,
+                         311],
+                        [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410,
+                         411],
+                        [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+                         511]])
+        geometry = Polygon([(100, -10), (100, -8), (110, -8), (110, -10)])
+        ncgeo.spatial_weighted_average(self.dummy_file_1, self.dummy_file_2,
+                                       geometry)
+        nc = netCDF4.Dataset(self.dummy_file_2, 'r')
+        nclon = nc.variables['lon']
+        nclat = nc.variables['lat']
+        ncvar = nc.variables['dummy']
+        self.assertEqual(nclon.size, 1)
+        self.assertEqual(nclat.size, 1)
+        self.assertEqual(nclon[0], 105)
+        #self.assertEqual(nclon[-1], 140)
+        self.assertEqual(nclat[0], -9)
+        #self.assertEqual(nclat[-1], 40)
+        self.assertEqual(ncvar.shape, (1, 1))
+        self.assertEqual(ncvar[0,0], 203)
+        #self.assertEqual(ncvar[-1,-1], 34)
+
 suite = unittest.TestLoader().loadTestsFromTestCase(TestNcGeo)
 
 if __name__ == '__main__':

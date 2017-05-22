@@ -1028,12 +1028,12 @@ def spatial_weighted_average(lon_vertices, lat_vertices, geometry, field,
     # there's room for optimisation... iterops the intersections,
     # check lon_lat_polygon_area performance
     if len(lon_vertices.shape) == 1:
-        grid_type = 'rectilinear_2d_bounds'
+        grid_type = 'rectilinear_2d_vertices'
     else:
         grid_type = 'irregular_2d_vertices'
     slices = subdomain_grid_slices_or_points_indices(
         lon_vertices, lat_vertices, geometry, grid_type)
-    if grid_type == 'rectilinear_2d_bounds':
+    if grid_type == 'rectilinear_2d_vertices':
         weights = np.zeros([slices[1].stop-slices[1].start,
                             slices[0].stop-slices[0].start])
         for i in range(slices[0].start, slices[0].stop):
@@ -1065,7 +1065,7 @@ def spatial_weighted_average(lon_vertices, lat_vertices, geometry, field,
                 weights[i,j] = area/float(cell_area)
     weights = weights/weights.sum()
     if spatial_indices:
-        if grid_type == 'rectilinear_2d_bounds':
+        if grid_type == 'rectilinear_2d_vertices':
             x = 1
         else:
             x = 0
@@ -1073,7 +1073,7 @@ def spatial_weighted_average(lon_vertices, lat_vertices, geometry, field,
         for i in range(len(field.shape)):
             if i in spatial_indices:
                 field_slices.append(slices[x])
-                if grid_type == 'rectilinear_2d_bounds':
+                if grid_type == 'rectilinear_2d_vertices':
                     x -= 1
                 else:
                     x += 1
@@ -1091,7 +1091,7 @@ def spatial_weighted_average(lon_vertices, lat_vertices, geometry, field,
         for i in reversed(sorted(spatial_indices)):
             weighted_average_field = weighted_average_field.sum(i)
     else:
-        if grid_type == 'rectilinear_2d_bounds':
+        if grid_type == 'rectilinear_2d_vertices':
             field = field[slices[1],slices[0]]
         else:
             field = field[slices[0],slices[1]]

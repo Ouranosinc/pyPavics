@@ -85,7 +85,7 @@ def reshape_subdomain(nclon, nclat, geometry, slices=None):
         slices = geogrid.subdomain_grid_slices_or_points_indices(
             nclon[...], nclat[...], geometry, lon_dimensions=nclon.dimensions,
             lat_dimensions=nclat.dimensions)
-    print slices
+    print(slices)
     reshapes = {}
     for i, lon_dimension in enumerate(nclon.dimensions):
         if isinstance(slices[i], slice):
@@ -185,7 +185,8 @@ def subset_bbox(nc_resource, out_file, bounding_box):
     subset_polygon(nc_resource, out_file, geometry, history_msg)
 
 
-def spatial_weighted_average(nc_resource, out_file, geometry):
+def spatial_weighted_average(nc_resource, out_file, geometry,
+                             history_msg=None):
     # currently we will assume x = lon, y = lat
     nc_format = 'NETCDF4_CLASSIC'
     # maybe need to download?
@@ -245,19 +246,31 @@ def spatial_weighted_average(nc_resource, out_file, geometry):
     nclat = nc_output.variables['lat']
     nclon[...] = geometry.centroid.x
     nclat[...] = geometry.centroid.y
+    # here we could set lon/lat vertices with bnds in NetCDF file if they
+    # exist...
+    if len(ncreflon.shape) == 1:
+        (lonv, latv) = geogrid.rectilinear_centroids_to_vertices(
+            ncreflon[:], ncreflat[:])
+    else:
+        (lonv, latv) = geogrid.centroids_to_quadrilaterals_mesh(
+            ncreflon[:,:], ncreflat[:,:])
     for var_name in spatial_info['spatial_vars']:
         if var_name in ['lon', 'lat']:
             continue
         ncrefvar = nc_reference[var_name]
         current_spatial_dims = []
-        for dim in ncrefvar.dimensions:
+        spatial_indices = []
+        for i, dim in enumerate(ncrefvar.dimensions):
             if dim in spatial_info['spatial_dims']:
                 current_spatial_dims.append(dim)
+                spatial_indices.append(i)
         if len(current_spatial_dims) == len(spatial_info['spatial_dims']):
             ncvar = nc_output.variables[var_name]
             # what if its too large for memory?
             # ncvar[...] = ncrefvar[ref_slices] some operation for weighted
             # averaging
+            ncvar[...] = geogrid.spatial_weighted_average(
+                lonv, latv, geometry, ncrefvar[...], spatial_indices)
 
     nc_reference.close()
     nc_output.close()
