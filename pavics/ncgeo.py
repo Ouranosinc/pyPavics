@@ -110,7 +110,7 @@ def find_warp_longitude(grid_lon, geometry):
     fixcentroid = geogrid.shapely_fix_longitudes(original_centroid, warp_lon)
     fixgeo = geogrid.shapely_fix_longitudes(geometry, warp_lon)
     newcentroid = fixgeo.centroid
-    if fixcentroid != newcentroid:
+    if not fixcentroid.almost_equals(newcentroid, decimal=6):
         print(original_centroid)
         print(fixcentroid)
         print(newcentroid)
