@@ -238,8 +238,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         # Default Birdhouse catalog entry
         doc = {'url': urls['download_url'],
                'source': os.path.join(urls['thredds_server'], 'catalog.xml'),
-               'catalog_url': urls['catalog_url'] + '?dataset=' +
-                              thredds_dataset.ID,
+               'catalog_url': "{0}?dataset={1}".format(
+                   urls['catalog_url'], thredds_dataset.ID),
                'category': 'thredds',
                'content_type': thredds_dataset.content_type,
                'opendap_url': urls['opendap_url'],
