@@ -353,7 +353,7 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
     target_files : list of string
         only those file names will be crawled.
     check_replica : bool
-        if True, will search for identical file names and facets in solr
+        if True, will search for identical file names and dataset_id in solr
         and tag this instance as replica=True if it already exists on
         another thredds server.
 
