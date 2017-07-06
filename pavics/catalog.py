@@ -107,10 +107,13 @@ def solr_update(solr_server, update_data):
                             solr_add_field(solr_server, one_key,
                                            multivalued=True)
                         else:
-                            solr_add_field(solr_server, one_key)
+                            if one_key in ['replica', 'latest']:
+                                solr_add_field(solr_server, one_key,
+                                               field_type='boolean')
+                            else:
+                                solr_add_field(solr_server, one_key)
                         list_of_fields.append(one_key)
             url_response = urlopen(url_request)
-            # return 'Unknown field'
         else:
             raise err
     update_result = url_response.read()
@@ -158,7 +161,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         ignore everything (only global attributes will be added to the
         database)
     set_dataset_id : bool
-        if true, the files that are in a common directory will have
+        if True, the files that are in a common directory will have
         their dataset_id set to reflect that unique relative directory
     overwrite_dataset_id : bool
         if set_dataset_id is True, this decides whether the default value
@@ -172,7 +175,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         only those file names will be crawled, can be urls or full paths,
         but only the file name will be used (if two files have the same name
         in different folders of the thredds catalog, they are both picked up
-        by the crawler.
+        by the crawler).
 
     Returns
     -------
@@ -261,6 +264,10 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                 doc[facet] = getattr(nc, facet)
             elif hasattr(nc, facet + '_id'):
                 doc[facet] = getattr(nc, facet + '_id')
+        # Replica and latest
+        # Setting defaults here, to be modified by other operations.
+        doc['replica'] = False
+        doc['latest'] = True
         if ignored_variables != 'all':
             for var_name in nc.variables:
                 if var_name in ignored_variables:
@@ -313,7 +320,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                 ignored_variables=None, set_dataset_id=False,
                 overwrite_dataset_id=False, internal_ip=None,
                 external_ip=None, output_internal_ip=False,
-                wms_alternate_server=None, target_files=None):
+                wms_alternate_server=None, target_files=None,
+                check_replica=True):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -344,6 +352,10 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
     wms_alternate_server : string
     target_files : list of string
         only those file names will be crawled.
+    check_replica : bool
+        if True, will search for identical file names and facets in solr
+        and tag this instance as replica=True if it already exists on
+        another thredds server.
 
     Returns
     -------
@@ -352,13 +364,11 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
 
     Notes
     -----
-    1. Each NetCDF file served bu the thredds server is scanned to extract
+    1. Each NetCDF file served by the thredds server is scanned to extract
        metadata (CF standard vocabulary). This metadata is then added
        to the Solr database so it can index the file by its properties.
-    2. Currently, the index facets must be part of the default Birdhouse
-       Solr Schema.
-    3. Variables that do not have any of 'standard_name', 'long_name' or
-       'units' attributes are ignoreds. If only one or two of those are
+    2. Variables that do not have any of 'standard_name', 'long_name' or
+       'units' attributes are ignored. If only one or two of those are
        missing, they are set to '_undefined' in the database.
 
     """
@@ -372,7 +382,40 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                                output_internal_ip=output_internal_ip,
                                wms_alternate_server=wms_alternate_server,
                                target_files=target_files)
-    return solr_update(solr_server, add_data)
+
+    # check for replica
+    if check_replica:
+        add_raw = []
+        add_refresh = []
+        for doc in add_data:
+            json_result = pavicsearch(
+                solr_server, limit=1000, search_type='File',
+                query="{0}%20AND%20{1}".format(
+                    doc['title'], doc['dataset_id']))
+            search_dict = json.loads(json_result)
+            if search_dict['response']['docs']:
+                for indexed_doc in search_dict['response']['docs']:
+                    # Here, checking that the free-query above really returned
+                    # exact results for title and dataset_id.
+                    if indexed_doc['title'] == doc['title'] and \
+                       indexed_doc['dataset_id'] == doc['dataset_id'] and \
+                       indexed_doc['source'] == doc['source']:
+                        add_refresh.append(doc)
+                        break
+                else:
+                    doc['replica'] = True
+                    add_raw.append(doc)
+            else:
+                add_raw.append(doc)
+        update_result = solr_update(solr_server, add_raw)
+        for doc in add_refresh:
+            update_result = pavicsupdate(solr_server, doc)
+        # Here, since the last update result is returned, QTime will not be
+        # cumulative, and there is no information on the number of calls
+        # to solr made...
+        return update_result
+    else:
+        return solr_update(solr_server, add_data)
 
 
 def pavicsvalidate(solr_server, required_facets, limit_paths=None,
