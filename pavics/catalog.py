@@ -30,6 +30,10 @@ from . import slicetools
 logger = logging.getLogger(__name__)
 
 
+class MissingThreddsFile(Exception):
+    pass
+
+
 def solr_add_field(solr_server, field_name, field_type='string',
                    multivalued=False):
     """Add a field in a Solr database.
@@ -175,7 +179,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         only those file names will be crawled, can be urls or full paths,
         but only the file name will be used (if two files have the same name
         in different folders of the thredds catalog, they are both picked up
-        by the crawler).
+        by the crawler). If this is provided, all target files must be
+        found.
 
     Returns
     -------
@@ -203,10 +208,13 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
     if target_files:
         for target_file in target_files:
             target_file_names.append(target_file.split('/')[-1])
+    targets_found = []
     for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth):
         if target_files:
-            if thredds_dataset.ID.split('/')[-1] not in target_file_names:
+            thredds_file_name = thredds_dataset.ID.split('/')[-1]
+            if thredds_file_name not in target_file_names:
                 continue
+            targets_found.append(thredds_file_name)
         wms_url = thredds_dataset.wms_url()
         # Change wms_url server if requested
         if wms_alternate_server is not None:
@@ -313,6 +321,13 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     doc['has_time'].append(0)
         nc.close()
         add_data.append(doc)
+    # Check that all target files were found
+    if target_files:
+        if set(target_file_names) != set(targets_found):
+            missing_files = set(target_file_names) - set(targets_found)
+            raise MissingThreddsFile(
+                "One or more target file not found: {0}".format(
+                    str(list(missing_files))))
     return add_data
 
 
@@ -351,7 +366,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
     output_internal_ip : bool
     wms_alternate_server : string
     target_files : list of string
-        only those file names will be crawled.
+        only those file names will be crawled. If this is provided, all target
+        files must be found or nothing will be added to solr.
     check_replica : bool
         if True, will search for identical file names and dataset_id in solr
         and tag this instance as replica=True if it already exists on
