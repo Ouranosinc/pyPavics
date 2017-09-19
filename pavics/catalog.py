@@ -14,6 +14,8 @@ Functions:
 
 import os
 import json
+import calendar
+# I may want to completely switch to requests...
 try:
     from urllib.request import urlopen, Request
     from urllib.error import HTTPError
@@ -25,6 +27,8 @@ import logging
 import threddsclient
 import netCDF4
 
+from . import nctime
+# possibly obsolete if not using minmax?
 from . import slicetools
 
 logger = logging.getLogger(__name__)
@@ -114,6 +118,9 @@ def solr_update(solr_server, update_data):
                             if one_key in ['replica', 'latest']:
                                 solr_add_field(solr_server, one_key,
                                                field_type='boolean')
+                            elif one_key in ['datetime_min', 'datetime_max']:
+                                solr_add_field(solr_server, one_key,
+                                               field_type='long')
                             else:
                                 solr_add_field(solr_server, one_key)
                         list_of_fields.append(one_key)
@@ -146,8 +153,7 @@ def ncvar_min_max(ncvar, memory_limit=500000000):
 
 def thredds_crawler(thredds_server, index_facets, depth=50,
                     ignored_variables=None, set_dataset_id=False,
-                    overwrite_dataset_id=False, internal_ip=None,
-                    external_ip=None, output_internal_ip=False,
+                    overwrite_dataset_id=False,
                     wms_alternate_server=None, target_files=None):
     """Crawl thredds server for metadata.
 
@@ -171,9 +177,6 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         if set_dataset_id is True, this decides whether the default value
         constructed by the crawler takes precedence over the dataset_id in
         the NetCDF file.
-    internal_ip : string
-    external_ip : string
-    output_internal_ip : bool
     wms_alternate_server : string
     target_files : list of string
         only those file names will be crawled, can be urls or full paths,
@@ -195,6 +198,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
     """
 
     if ignored_variables is None:
+        # This needs to be moved to a config file...
         ignored_variables = ['time', 'time_bnds', 'time_bounds',
                              'time_vectors', 'lat', 'lon', 'yc', 'xc',
                              'rlat', 'rlon', 'lat_bnds', 'lat_bounds',
@@ -204,17 +208,20 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                              'level', 'level_bnds', 'level_bounds', 'plev']
 
     add_data = []
+    # Get only filenames of target_files
     target_file_names = []
     if target_files:
         for target_file in target_files:
-            target_file_names.append(target_file.split('/')[-1])
+            target_file_names.append(os.path.basename(target_file))
+
     targets_found = []
     for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth):
         if target_files:
-            thredds_file_name = thredds_dataset.ID.split('/')[-1]
+            thredds_file_name = os.path.basename(thredds_dataset.ID)
             if thredds_file_name not in target_file_names:
                 continue
             targets_found.append(thredds_file_name)
+
         wms_url = thredds_dataset.wms_url()
         # Change wms_url server if requested
         if wms_alternate_server is not None:
@@ -222,27 +229,23 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
             thredds_rel_path = thredds_id[thredds_id.find('/') + 1:]
             wms_url = wms_alternate_server.replace('<DATASET>',
                                                    thredds_rel_path)
+
         urls = {'opendap_url': thredds_dataset.opendap_url(),
                 'download_url': thredds_dataset.download_url(),
                 'thredds_server': thredds_server,
                 'catalog_url': thredds_dataset.catalog.url,
                 'wms_url': wms_url}
+
         # Here, if opening the NetCDF file fails, we simply continue
         # to the next one. Perhaps a way to track the erroneous files
         # should be considered...
         try:
             nc = netCDF4.Dataset(urls['opendap_url'], 'r')
+            (datetime_min, datetime_max) = nctime.time_start_end(nc)
         except:
             # Should have a logging mechanism
             continue
-        # Modifying all the ip addresses if there is an issue of
-        # internal/external ips (e.g. OpenStack)
-        if internal_ip is not None:
-            for key in urls:
-                if output_internal_ip:
-                    urls[key] = urls[key].replace(external_ip, internal_ip)
-                else:
-                    urls[key] = urls[key].replace(internal_ip, external_ip)
+
         # Default Birdhouse catalog entry
         doc = {'url': urls['download_url'],
                'source': os.path.join(urls['thredds_server'], 'catalog.xml'),
@@ -256,6 +259,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                'wms_url': urls['wms_url'],
                'resourcename': thredds_dataset.url_path,
                'subject': 'Birdhouse Thredds Catalog'}
+
         # Set default dataset_id
         if set_dataset_id:
             ci = urls['catalog_url'].find('/catalog.xml')
@@ -266,16 +270,29 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
             elif (not overwrite_dataset_id) and \
                  ('dataset_id' not in index_facets):
                 index_facets.append('dataset_id')
+
         # Add custom facets
         for facet in index_facets:
             if hasattr(nc, facet):
                 doc[facet] = getattr(nc, facet)
             elif hasattr(nc, facet + '_id'):
                 doc[facet] = getattr(nc, facet + '_id')
+
         # Replica and latest
         # Setting defaults here, to be modified by other operations.
         doc['replica'] = False
         doc['latest'] = True
+
+        # Datetime min/max
+        if datetime_min:
+            # Apparently, calendar.timegm can take dates from irregular
+            # calendars. 2003-03-01 & 2003-02-29 (not a valid gregorian date)
+            # both return the same result...
+            # Not sure what happens to time zones here...
+            doc['datetime_min'] = calendar.timegm(datetime_min.timetuple())
+        if datetime_max:
+            doc['datetime_max'] = calendar.timegm(datetime_max.timetuple())
+
         if ignored_variables != 'all':
             for var_name in nc.variables:
                 if var_name in ignored_variables:
@@ -292,14 +309,16 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                                        'data_min', 'data_max', 'has_time']:
                     if parameter_name not in doc:
                         doc[parameter_name] = []
-                try:
-                    (data_min, data_max) = ncvar_min_max(ncvar)
-                except:
-                    # Should have a logging mechanism for this...
-                    continue
-                else:
-                    doc['data_min'].append(data_min)
-                    doc['data_max'].append(data_max)
+                # Min max no longer required? This would speed up things
+                # considerably...
+                # try:
+                #     (data_min, data_max) = ncvar_min_max(ncvar)
+                # except:
+                #     # Should have a logging mechanism for this...
+                #     continue
+                # else:
+                #     doc['data_min'].append(data_min)
+                #     doc['data_max'].append(data_max)
                 doc['variable'].append(var_name)
                 if ccf:
                     value = getattr(ncvar, 'standard_name')
@@ -321,6 +340,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     doc['has_time'].append(0)
         nc.close()
         add_data.append(doc)
+
     # Check that all target files were found
     if target_files:
         if set(target_file_names) != set(targets_found):
@@ -333,10 +353,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 
 def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                 ignored_variables=None, set_dataset_id=False,
-                overwrite_dataset_id=False, internal_ip=None,
-                external_ip=None, output_internal_ip=False,
-                wms_alternate_server=None, target_files=None,
-                check_replica=True):
+                overwrite_dataset_id=False, wms_alternate_server=None,
+                target_files=None, check_replica=True, split_update=100):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -361,9 +379,6 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         if set_dataset_id is True, this decides whether the default value
         constructed by the crawler takes precedence over the dataset_id in
         the NetCDF file.
-    internal_ip : string
-    external_ip : string
-    output_internal_ip : bool
     wms_alternate_server : string
     target_files : list of string
         only those file names will be crawled. If this is provided, all target
@@ -372,6 +387,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         if True, will search for identical file names and dataset_id in solr
         and tag this instance as replica=True if it already exists on
         another thredds server.
+    split_update : int
+        how many datasets will be updated per solr request.
 
     Returns
     -------
@@ -393,9 +410,6 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                                ignored_variables=ignored_variables,
                                set_dataset_id=set_dataset_id,
                                overwrite_dataset_id=overwrite_dataset_id,
-                               internal_ip=internal_ip,
-                               external_ip=external_ip,
-                               output_internal_ip=output_internal_ip,
                                wms_alternate_server=wms_alternate_server,
                                target_files=target_files)
 
@@ -404,6 +418,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         add_raw = []
         add_refresh = []
         for doc in add_data:
+            # if dataset_id is not already a key in solr, this will return
+            # a KeyError...
             json_result = pavicsearch(
                 solr_server, limit=1000, search_type='File',
                 query="{0}%20AND%20{1}".format(
@@ -423,7 +439,13 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                     add_raw.append(doc)
             else:
                 add_raw.append(doc)
-        update_result = solr_update(solr_server, add_raw)
+        # This step is repeated below, deserves a function...
+        if split_update:
+            for i in range(0, len(add_raw), split_update):
+                update_result = solr_update(
+                    solr_server, add_raw[i:i + split_update])
+        else:
+            update_result = solr_update(solr_server, add_raw)
         for doc in add_refresh:
             update_result = pavicsupdate(solr_server, doc)
         # Here, since the last update result is returned, QTime will not be
@@ -431,7 +453,16 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         # to solr made...
         return update_result
     else:
-        return solr_update(solr_server, add_data)
+        if split_update:
+            for i in range(0, len(add_data), split_update):
+                update_result = solr_update(
+                    solr_server, add_data[i:i + split_update])
+            # Here, since the last update result is returned, QTime will not be
+            # cumulative, and there is no information on the number of calls
+            # to solr made...
+            return update_result
+        else:
+            return solr_update(solr_server, add_data)
 
 
 def pavicsvalidate(solr_server, required_facets, limit_paths=None,
@@ -727,3 +758,71 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
             raise NotImplementedError()
         search_result = datasets_from_solr_search(search_result)
     return search_result
+
+
+def pavicsvisualize(thredds_server, target_file, wms_alternate_server=None,
+                    depth=50):
+    # Need to move this to a config...
+    variables_default_min_max = {
+        'pr': (0, 0.0001, 'seq-Blues'),
+        'tas': (253.13, 293.13, 'div-BuRd')
+    }
+
+    for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth):
+        thredds_file_name = os.path.basename(thredds_dataset.ID)
+        # There's a problem here with multiple files with the same name...
+        target_file_name = os.path.basename(target_file)
+        if thredds_file_name != target_file_name:
+                continue
+
+        wms_url = thredds_dataset.wms_url()
+        # Change wms_url server if requested
+        if wms_alternate_server is not None:
+            thredds_id = thredds_dataset.ID
+            thredds_rel_path = thredds_id[thredds_id.find('/') + 1:]
+            wms_url = wms_alternate_server.replace('<DATASET>',
+                                                   thredds_rel_path)
+
+        viz_info = {'opendap_url': thredds_dataset.opendap_url(),
+                    'wms_url': wms_url}
+        nc = netCDF4.Dataset(viz_info['opendap_url'], 'r')
+        (datetime_min, datetime_max) = nctime.time_start_end(nc)
+        if datetime_min:
+            # Apparently, calendar.timegm can take dates from irregular
+            # calendars. 2003-03-01 & 2003-02-29 (not a valid gregorian date)
+            # both return the same result...
+            # Not sure what happens to time zones here...
+            viz_info['datetime_min'] = calendar.timegm(
+                datetime_min.timetuple())
+        if datetime_max:
+            viz_info['datetime_max'] = calendar.timegm(
+                datetime_max.timetuple())
+        # This needs to be moved to a config file...
+        ignored_variables = ['time', 'time_bnds', 'time_bounds',
+                             'time_vectors', 'lat', 'lon', 'yc', 'xc',
+                             'rlat', 'rlon', 'lat_bnds', 'lat_bounds',
+                             'lon_bnds', 'lon_bounds', 'yc_bnds', 'xc_bnds',
+                             'yc_bounds', 'xc_bounds', 'rlat_bnds',
+                             'rlat_bounds', 'rlon_bnds', 'rlon_bounds',
+                             'level', 'level_bnds', 'level_bounds', 'plev']
+        viz_info['variable'] = []
+        for var_name in nc.variables.keys():
+            if var_name not in ignored_variables:
+                viz_info['variable'].append(var_name)
+        viz_info['variables_min'] = []
+        viz_info['variables_max'] = []
+        viz_info['variables_palette'] = []
+        for var_name in viz_info['variable']:
+            min_max = variables_default_min_max.get(
+                var_name, (0, 1, 'default'))
+            viz_info['variables_min'].append(min_max[0])
+            viz_info['variables_max'].append(min_max[1])
+            viz_info['variables_palette'].append(min_max[2])
+        break
+    else:
+        # Need a better error, did not find the file
+        raise NotImplementedError()
+    d = {"response": {"numFound": 1,
+                      "start": 0,
+                      "docs": [viz_info]}}
+    return d
