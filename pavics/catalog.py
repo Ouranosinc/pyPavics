@@ -18,9 +18,8 @@ import calendar
 # I may want to completely switch to requests...
 try:
     from urllib.request import urlopen, Request
-    from urllib.error import HTTPError
 except ImportError:
-    from urllib2 import urlopen, Request, HTTPError
+    from urllib2 import urlopen, Request
 import requests
 import logging
 
@@ -28,14 +27,51 @@ import threddsclient
 import netCDF4
 
 from . import nctime
-# possibly obsolete if not using minmax?
-from . import slicetools
 
 logger = logging.getLogger(__name__)
 
 
+# These definitions should be moved to a config file
+solr_fields_type = {'datetime_max': 'long',
+                    'datetime_min': 'long',
+                    'latest': 'boolean',
+                    'replica': 'boolean'}
+
+netcdf_ignored_variables = [
+    'time', 'time_bnds', 'time_bounds', 'time_vectors', 'lat', 'lon', 'yc',
+    'xc', 'rlat', 'rlon', 'lat_bnds', 'lat_bounds', 'lon_bnds', 'lon_bounds',
+    'yc_bnds', 'xc_bnds', 'yc_bounds', 'xc_bounds', 'rlat_bnds', 'rlat_bounds',
+    'rlon_bnds', 'rlon_bounds', 'level', 'level_bnds', 'level_bounds', 'plev']
+
+variables_default_min_max = {
+    'pr': (0, 0.0001, 'seq-Blues'),
+    'tas': (253.13, 293.13, 'div-BuRd')}
+
+
 class MissingThreddsFile(Exception):
     pass
+
+
+def _modify_wms_url(thredds_dataset, wms_alternate_server=None):
+    wms_url = thredds_dataset.wms_url()
+    if wms_alternate_server is not None:
+        thredds_id = thredds_dataset.ID
+        thredds_rel_path = thredds_id[thredds_id.find('/') + 1:]
+        wms_url = wms_alternate_server.replace('<DATASET>', thredds_rel_path)
+    return wms_url
+
+
+def _split_solr_update(solr_server, add_data, split_update=None):
+    if split_update:
+        for i in range(0, len(add_data), split_update):
+            update_result = solr_update(
+                solr_server, add_data[i:i + split_update])
+        # Here, since the last update result is returned, QTime will not be
+        # cumulative, and there is no information on the number of calls
+        # to solr made...
+        return update_result
+    else:
+        return solr_update(solr_server, add_data)
 
 
 def solr_add_field(solr_server, field_name, field_type='string',
@@ -87,68 +123,40 @@ def solr_update(solr_server, update_data):
 
     """
 
+    # make sure update_data is a list
+    if not hasattr(update_data, 'append'):
+        update_data = [update_data]
+
+    # search for fields that do not yet exist in Solr
+    solr_call = os.path.join(solr_server, 'schema', 'fields?wt=json')
+    r = requests.get(solr_call)
+    if not r.ok:
+        r.raise_for_status()
+    solr_fields = r.json()
+    list_of_fields = []
+    for field in solr_fields['fields']:
+        list_of_fields.append(field['name'])
+    for one_update in update_data:
+        for field in one_update:
+            if field not in list_of_fields:
+                if hasattr(one_update[field], 'append'):
+                    multivalued = True
+                else:
+                    multivalued = False
+                field_type = solr_fields_type.get(field, 'string')
+                solr_add_field(solr_server, field, field_type=field_type,
+                               multivalued=multivalued)
+                list_of_fields.append(field)
+
+    # add data to solr
+    solr_call = os.path.join(solr_server, 'update', 'json?commit=true')
     solr_json_input = json.dumps(update_data)
-    logger.debug(solr_json_input)
-    # Send Solr update request
-    solr_method = 'update/json?commit=true'
-    url_request = Request(url=solr_server + solr_method, data=solr_json_input)
-    url_request.add_header('Content-type', 'application/json')
-    try:
-        url_response = urlopen(url_request)
-    except HTTPError as err:
-        if err.msg == 'Bad Request':
-            # One of the most likely reason for this is trying to add
-            # a field that is not part of the Solr Schema.
-            fields_path = os.path.join(solr_server, 'schema', 'fields?wt=json')
-            fields_request = urlopen(fields_path)
-            fields_response = json.loads(fields_request.read())
-            list_of_fields = []
-            for one_field in fields_response['fields']:
-                list_of_fields.append(one_field['name'])
-            if not hasattr(update_data, 'append'):
-                update_data = [update_data]
-            for one_update in update_data:
-                for one_key in one_update:
-                    if one_key not in list_of_fields:
-                        # New fields are added as string type (default)
-                        if hasattr(one_update[one_key], 'append'):
-                            solr_add_field(solr_server, one_key,
-                                           multivalued=True)
-                        else:
-                            if one_key in ['replica', 'latest']:
-                                solr_add_field(solr_server, one_key,
-                                               field_type='boolean')
-                            elif one_key in ['datetime_min', 'datetime_max']:
-                                solr_add_field(solr_server, one_key,
-                                               field_type='long')
-                            else:
-                                solr_add_field(solr_server, one_key)
-                        list_of_fields.append(one_key)
-            url_response = urlopen(url_request)
-        else:
-            raise err
-    update_result = url_response.read()
-    url_response.close()
-
+    headers = {'Content-type': 'application/json'}
+    r = requests.post(solr_call, data=solr_json_input, headers=headers)
+    if not r.ok:
+        r.raise_for_status()
+    update_result = r.json()
     return update_result
-
-
-def ncvar_min_max(ncvar, memory_limit=500000000):
-    divisions = slicetools.divide_slices_for_memory_fit(
-        ncvar.shape, ncvar.dtype, memory_size=memory_limit)
-    for i, division in enumerate(divisions):
-        subdata = ncvar[division]
-        if i == 0:
-            data_min = subdata.min()
-            data_max = subdata.max()
-        else:
-            tmp_min = subdata.min()
-            if tmp_min < data_min:
-                data_min = tmp_min
-            tmp_max = subdata.max()
-            if tmp_max > data_max:
-                data_max = tmp_max
-    return (float(data_min), float(data_max))
 
 
 def thredds_crawler(thredds_server, index_facets, depth=50,
@@ -198,14 +206,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
     """
 
     if ignored_variables is None:
-        # This needs to be moved to a config file...
-        ignored_variables = ['time', 'time_bnds', 'time_bounds',
-                             'time_vectors', 'lat', 'lon', 'yc', 'xc',
-                             'rlat', 'rlon', 'lat_bnds', 'lat_bounds',
-                             'lon_bnds', 'lon_bounds', 'yc_bnds', 'xc_bnds',
-                             'yc_bounds', 'xc_bounds', 'rlat_bnds',
-                             'rlat_bounds', 'rlon_bnds', 'rlon_bounds',
-                             'level', 'level_bnds', 'level_bounds', 'plev']
+        ignored_variables = netcdf_ignored_variables
 
     add_data = []
     # Get only filenames of target_files
@@ -222,14 +223,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                 continue
             targets_found.append(thredds_file_name)
 
-        wms_url = thredds_dataset.wms_url()
-        # Change wms_url server if requested
-        if wms_alternate_server is not None:
-            thredds_id = thredds_dataset.ID
-            thredds_rel_path = thredds_id[thredds_id.find('/') + 1:]
-            wms_url = wms_alternate_server.replace('<DATASET>',
-                                                   thredds_rel_path)
-
+        wms_url = _modify_wms_url(thredds_dataset, wms_alternate_server)
         urls = {'opendap_url': thredds_dataset.opendap_url(),
                 'download_url': thredds_dataset.download_url(),
                 'thredds_server': thredds_server,
@@ -309,16 +303,6 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                                        'data_min', 'data_max', 'has_time']:
                     if parameter_name not in doc:
                         doc[parameter_name] = []
-                # Min max no longer required? This would speed up things
-                # considerably...
-                # try:
-                #     (data_min, data_max) = ncvar_min_max(ncvar)
-                # except:
-                #     # Should have a logging mechanism for this...
-                #     continue
-                # else:
-                #     doc['data_min'].append(data_min)
-                #     doc['data_max'].append(data_max)
                 doc['variable'].append(var_name)
                 if ccf:
                     value = getattr(ncvar, 'standard_name')
@@ -419,7 +403,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         add_refresh = []
         for doc in add_data:
             # if dataset_id is not already a key in solr, this will return
-            # a KeyError...
+            # a KeyError... but every entry should have one if it was done
+            # with the crawler...
             json_result = pavicsearch(
                 solr_server, limit=1000, search_type='File',
                 query="{0}%20AND%20{1}".format(
@@ -439,13 +424,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                     add_raw.append(doc)
             else:
                 add_raw.append(doc)
-        # This step is repeated below, deserves a function...
-        if split_update:
-            for i in range(0, len(add_raw), split_update):
-                update_result = solr_update(
-                    solr_server, add_raw[i:i + split_update])
-        else:
-            update_result = solr_update(solr_server, add_raw)
+
+        update_result = _split_solr_update(solr_server, add_raw, split_update)
         for doc in add_refresh:
             update_result = pavicsupdate(solr_server, doc)
         # Here, since the last update result is returned, QTime will not be
@@ -453,16 +433,7 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         # to solr made...
         return update_result
     else:
-        if split_update:
-            for i in range(0, len(add_data), split_update):
-                update_result = solr_update(
-                    solr_server, add_data[i:i + split_update])
-            # Here, since the last update result is returned, QTime will not be
-            # cumulative, and there is no information on the number of calls
-            # to solr made...
-            return update_result
-        else:
-            return solr_update(solr_server, add_data)
+        return _split_solr_update(solr_server, add_data, split_update)
 
 
 def pavicsvalidate(solr_server, required_facets, limit_paths=None,
@@ -761,12 +732,32 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
 
 
 def pavicsvisualize(thredds_server, target_file, wms_alternate_server=None,
-                    depth=50):
-    # Need to move this to a config...
-    variables_default_min_max = {
-        'pr': (0, 0.0001, 'seq-Blues'),
-        'tas': (253.13, 293.13, 'div-BuRd')
-    }
+                    depth=50, ignored_variables=None):
+    """Pseudo solr response for pavics runtime visualization.
+
+    Parameters
+    ----------
+    thredds_server : string
+        usually of the form 'http://x.x.x.x:8083/thredds'
+    depth : int
+        thredds parameter for depth of subdirectories to search
+    ignored_variables : list of string
+        variables that will be considered metadata and not added to the
+        list of variables in the NetCDF file. Can be set to 'all' to
+        ignore everything (only global attributes will be added to the
+        database)
+    wms_alternate_server : string
+    target_file : string
+
+    Returns
+    -------
+    out : string
+        json response following the Solr format
+
+    """
+
+    if ignored_variables is None:
+        ignored_variables = netcdf_ignored_variables
 
     for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth):
         thredds_file_name = os.path.basename(thredds_dataset.ID)
@@ -775,13 +766,7 @@ def pavicsvisualize(thredds_server, target_file, wms_alternate_server=None,
         if thredds_file_name != target_file_name:
                 continue
 
-        wms_url = thredds_dataset.wms_url()
-        # Change wms_url server if requested
-        if wms_alternate_server is not None:
-            thredds_id = thredds_dataset.ID
-            thredds_rel_path = thredds_id[thredds_id.find('/') + 1:]
-            wms_url = wms_alternate_server.replace('<DATASET>',
-                                                   thredds_rel_path)
+        wms_url = _modify_wms_url(thredds_dataset, wms_alternate_server)
 
         viz_info = {'opendap_url': thredds_dataset.opendap_url(),
                     'wms_url': wms_url}
@@ -797,14 +782,6 @@ def pavicsvisualize(thredds_server, target_file, wms_alternate_server=None,
         if datetime_max:
             viz_info['datetime_max'] = calendar.timegm(
                 datetime_max.timetuple())
-        # This needs to be moved to a config file...
-        ignored_variables = ['time', 'time_bnds', 'time_bounds',
-                             'time_vectors', 'lat', 'lon', 'yc', 'xc',
-                             'rlat', 'rlon', 'lat_bnds', 'lat_bounds',
-                             'lon_bnds', 'lon_bounds', 'yc_bnds', 'xc_bnds',
-                             'yc_bounds', 'xc_bounds', 'rlat_bnds',
-                             'rlat_bounds', 'rlon_bnds', 'rlon_bounds',
-                             'level', 'level_bnds', 'level_bounds', 'plev']
         viz_info['variable'] = []
         for var_name in nc.variables.keys():
             if var_name not in ignored_variables:
