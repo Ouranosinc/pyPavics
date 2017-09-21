@@ -13,25 +13,69 @@ Functions:
 """
 
 import os
+import copy
 import json
-try:
-    from urllib.request import urlopen, Request
-    from urllib.error import HTTPError
-except ImportError:
-    from urllib2 import urlopen, Request, HTTPError
+import calendar
 import requests
 import logging
 
 import threddsclient
 import netCDF4
 
-from . import slicetools
+from . import nctime
 
 logger = logging.getLogger(__name__)
 
 
+# These definitions should be moved to a config file
+solr_fields_type = {'datetime_max': 'long',
+                    'datetime_min': 'long',
+                    'latest': 'boolean',
+                    'replica': 'boolean'}
+
+netcdf_ignored_variables = [
+    'time', 'time_bnds', 'time_bounds', 'time_vectors', 'lat', 'lon', 'yc',
+    'xc', 'rlat', 'rlon', 'lat_bnds', 'lat_bounds', 'lon_bnds', 'lon_bounds',
+    'yc_bnds', 'xc_bnds', 'yc_bounds', 'xc_bounds', 'rlat_bnds', 'rlat_bounds',
+    'rlon_bnds', 'rlon_bounds', 'level', 'level_bnds', 'level_bounds', 'plev']
+
+
 class MissingThreddsFile(Exception):
     pass
+
+
+def _modify_wms_url(thredds_dataset, wms_alternate_server=None):
+    wms_url = thredds_dataset.wms_url()
+    if wms_alternate_server is not None:
+        thredds_id = thredds_dataset.ID
+        thredds_rel_path = thredds_id[thredds_id.find('/') + 1:]
+        wms_url = wms_alternate_server.replace('<DATASET>', thredds_rel_path)
+    return wms_url
+
+
+def aggregate_solr_responses(solr_response1, solr_response2):
+    solr_response_agg = copy.deepcopy(solr_response1)
+    qtime2 = solr_response2['responseHeader']['QTime']
+    solr_response_agg['responseHeader']['QTime'] += qtime2
+    if 'Nquery' in solr_response_agg['responseHeader']:
+        solr_response_agg['responseHeader']['Nquery'] += 1
+    else:
+        solr_response_agg['responseHeader']['Nquery'] = 2
+    return solr_response_agg
+
+
+def _split_solr_update(solr_server, add_data, split_update=None):
+    if split_update:
+        for i in range(0, len(add_data), split_update):
+            update_result = solr_update(
+                solr_server, add_data[i:i + split_update])
+            if i > 0:
+                update_result = aggregate_solr_responses(
+                    previous_update, update_result)
+            previous_update = update_result
+        return update_result
+    else:
+        return solr_update(solr_server, add_data)
 
 
 def solr_add_field(solr_server, field_name, field_type='string',
@@ -44,6 +88,7 @@ def solr_add_field(solr_server, field_name, field_type='string',
         usually of the form 'http://x.x.x.x:8983/solr/core_name/'
     field_name : string
     field_type : string
+    multivalued : bool
 
     Returns
     -------
@@ -83,71 +128,45 @@ def solr_update(solr_server, update_data):
 
     """
 
+    # make sure update_data is a list
+    if not hasattr(update_data, 'append'):
+        update_data = [update_data]
+
+    # search for fields that do not yet exist in Solr and add them
+    solr_call = os.path.join(solr_server, 'schema', 'fields?wt=json')
+    r = requests.get(solr_call)
+    if not r.ok:
+        r.raise_for_status()
+    solr_fields = r.json()
+    list_of_fields = []
+    for field in solr_fields['fields']:
+        list_of_fields.append(field['name'])
+    for one_update in update_data:
+        for field in one_update:
+            if field not in list_of_fields:
+                if hasattr(one_update[field], 'append'):
+                    multivalued = True
+                else:
+                    multivalued = False
+                field_type = solr_fields_type.get(field, 'string')
+                solr_add_field(solr_server, field, field_type=field_type,
+                               multivalued=multivalued)
+                list_of_fields.append(field)
+
+    # add data to solr
+    solr_call = os.path.join(solr_server, 'update', 'json?commit=true')
     solr_json_input = json.dumps(update_data)
-    logger.debug(solr_json_input)
-    # Send Solr update request
-    solr_method = 'update/json?commit=true'
-    url_request = Request(url=solr_server + solr_method, data=solr_json_input)
-    url_request.add_header('Content-type', 'application/json')
-    try:
-        url_response = urlopen(url_request)
-    except HTTPError as err:
-        if err.msg == 'Bad Request':
-            # One of the most likely reason for this is trying to add
-            # a field that is not part of the Solr Schema.
-            fields_path = os.path.join(solr_server, 'schema', 'fields?wt=json')
-            fields_request = urlopen(fields_path)
-            fields_response = json.loads(fields_request.read())
-            list_of_fields = []
-            for one_field in fields_response['fields']:
-                list_of_fields.append(one_field['name'])
-            if not hasattr(update_data, 'append'):
-                update_data = [update_data]
-            for one_update in update_data:
-                for one_key in one_update:
-                    if one_key not in list_of_fields:
-                        # New fields are added as string type (default)
-                        if hasattr(one_update[one_key], 'append'):
-                            solr_add_field(solr_server, one_key,
-                                           multivalued=True)
-                        else:
-                            if one_key in ['replica', 'latest']:
-                                solr_add_field(solr_server, one_key,
-                                               field_type='boolean')
-                            else:
-                                solr_add_field(solr_server, one_key)
-                        list_of_fields.append(one_key)
-            url_response = urlopen(url_request)
-        else:
-            raise err
-    update_result = url_response.read()
-    url_response.close()
-
+    headers = {'Content-type': 'application/json'}
+    r = requests.post(solr_call, data=solr_json_input, headers=headers)
+    if not r.ok:
+        r.raise_for_status()
+    update_result = r.json()
     return update_result
-
-
-def ncvar_min_max(ncvar, memory_limit=500000000):
-    divisions = slicetools.divide_slices_for_memory_fit(
-        ncvar.shape, ncvar.dtype, memory_size=memory_limit)
-    for i, division in enumerate(divisions):
-        subdata = ncvar[division]
-        if i == 0:
-            data_min = subdata.min()
-            data_max = subdata.max()
-        else:
-            tmp_min = subdata.min()
-            if tmp_min < data_min:
-                data_min = tmp_min
-            tmp_max = subdata.max()
-            if tmp_max > data_max:
-                data_max = tmp_max
-    return (float(data_min), float(data_max))
 
 
 def thredds_crawler(thredds_server, index_facets, depth=50,
                     ignored_variables=None, set_dataset_id=False,
-                    overwrite_dataset_id=False, internal_ip=None,
-                    external_ip=None, output_internal_ip=False,
+                    overwrite_dataset_id=False,
                     wms_alternate_server=None, target_files=None):
     """Crawl thredds server for metadata.
 
@@ -171,9 +190,6 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         if set_dataset_id is True, this decides whether the default value
         constructed by the crawler takes precedence over the dataset_id in
         the NetCDF file.
-    internal_ip : string
-    external_ip : string
-    output_internal_ip : bool
     wms_alternate_server : string
     target_files : list of string
         only those file names will be crawled, can be urls or full paths,
@@ -195,56 +211,46 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
     """
 
     if ignored_variables is None:
-        ignored_variables = ['time', 'time_bnds', 'time_bounds',
-                             'time_vectors', 'lat', 'lon', 'yc', 'xc',
-                             'rlat', 'rlon', 'lat_bnds', 'lat_bounds',
-                             'lon_bnds', 'lon_bounds', 'yc_bnds', 'xc_bnds',
-                             'yc_bounds', 'xc_bounds', 'rlat_bnds',
-                             'rlat_bounds', 'rlon_bnds', 'rlon_bounds',
-                             'level', 'level_bnds', 'level_bounds', 'plev']
+        ignored_variables = netcdf_ignored_variables
 
     add_data = []
+    # Get only filenames of target_files
     target_file_names = []
     if target_files:
         for target_file in target_files:
-            target_file_names.append(target_file.split('/')[-1])
+            target_file_names.append(os.path.basename(target_file))
+
     targets_found = []
     for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth):
         if target_files:
-            thredds_file_name = thredds_dataset.ID.split('/')[-1]
+            thredds_file_name = os.path.basename(thredds_dataset.ID)
             if thredds_file_name not in target_file_names:
                 continue
             targets_found.append(thredds_file_name)
-        wms_url = thredds_dataset.wms_url()
-        # Change wms_url server if requested
-        if wms_alternate_server is not None:
-            thredds_id = thredds_dataset.ID
-            thredds_rel_path = thredds_id[thredds_id.find('/') + 1:]
-            wms_url = wms_alternate_server.replace('<DATASET>',
-                                                   thredds_rel_path)
+
+        wms_url = _modify_wms_url(thredds_dataset, wms_alternate_server)
         urls = {'opendap_url': thredds_dataset.opendap_url(),
                 'download_url': thredds_dataset.download_url(),
                 'thredds_server': thredds_server,
                 'catalog_url': thredds_dataset.catalog.url,
                 'wms_url': wms_url}
+
         # Here, if opening the NetCDF file fails, we simply continue
         # to the next one. Perhaps a way to track the erroneous files
         # should be considered...
         try:
             nc = netCDF4.Dataset(urls['opendap_url'], 'r')
+            (datetime_min, datetime_max) = nctime.time_start_end(nc)
         except:
             # Should have a logging mechanism
             continue
-        # Modifying all the ip addresses if there is an issue of
-        # internal/external ips (e.g. OpenStack)
-        if internal_ip is not None:
-            for key in urls:
-                if output_internal_ip:
-                    urls[key] = urls[key].replace(external_ip, internal_ip)
-                else:
-                    urls[key] = urls[key].replace(internal_ip, external_ip)
+
         # Default Birdhouse catalog entry
+        # 'url' is used differently in the ESGF database, adding
+        # 'fileserver_url' and will possibly use 'url' as in the ESGF
+        # implementation
         doc = {'url': urls['download_url'],
+               'fileserver_url': urls['download_url'],
                'source': os.path.join(urls['thredds_server'], 'catalog.xml'),
                'catalog_url': "{0}?dataset={1}".format(
                    urls['catalog_url'], thredds_dataset.ID),
@@ -255,7 +261,9 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                'last_modified': thredds_dataset.modified,
                'wms_url': urls['wms_url'],
                'resourcename': thredds_dataset.url_path,
-               'subject': 'Birdhouse Thredds Catalog'}
+               'subject': 'Birdhouse Thredds Catalog',
+               'type': 'File'}
+
         # Set default dataset_id
         if set_dataset_id:
             ci = urls['catalog_url'].find('/catalog.xml')
@@ -266,16 +274,32 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
             elif (not overwrite_dataset_id) and \
                  ('dataset_id' not in index_facets):
                 index_facets.append('dataset_id')
+
         # Add custom facets
+        # In the ESGF implementation, all facets are stored in multivalued
+        # fields, not sure how this is ever used... Not following this
+        # convention here...
         for facet in index_facets:
             if hasattr(nc, facet):
                 doc[facet] = getattr(nc, facet)
             elif hasattr(nc, facet + '_id'):
                 doc[facet] = getattr(nc, facet + '_id')
+
         # Replica and latest
         # Setting defaults here, to be modified by other operations.
         doc['replica'] = False
         doc['latest'] = True
+
+        # Datetime min/max
+        if datetime_min:
+            # Apparently, calendar.timegm can take dates from irregular
+            # calendars. 2003-03-01 & 2003-02-29 (not a valid gregorian date)
+            # both return the same result...
+            # Not sure what happens to time zones here...
+            doc['datetime_min'] = calendar.timegm(datetime_min.timetuple())
+        if datetime_max:
+            doc['datetime_max'] = calendar.timegm(datetime_max.timetuple())
+
         if ignored_variables != 'all':
             for var_name in nc.variables:
                 if var_name in ignored_variables:
@@ -289,17 +313,9 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     continue
                 for parameter_name in ['variable', 'cf_standard_name',
                                        'variable_long_name', 'units',
-                                       'data_min', 'data_max', 'has_time']:
+                                       'has_time']:
                     if parameter_name not in doc:
                         doc[parameter_name] = []
-                try:
-                    (data_min, data_max) = ncvar_min_max(ncvar)
-                except:
-                    # Should have a logging mechanism for this...
-                    continue
-                else:
-                    doc['data_min'].append(data_min)
-                    doc['data_max'].append(data_max)
                 doc['variable'].append(var_name)
                 if ccf:
                     value = getattr(ncvar, 'standard_name')
@@ -321,6 +337,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     doc['has_time'].append(0)
         nc.close()
         add_data.append(doc)
+
     # Check that all target files were found
     if target_files:
         if set(target_file_names) != set(targets_found):
@@ -333,10 +350,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 
 def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                 ignored_variables=None, set_dataset_id=False,
-                overwrite_dataset_id=False, internal_ip=None,
-                external_ip=None, output_internal_ip=False,
-                wms_alternate_server=None, target_files=None,
-                check_replica=True):
+                overwrite_dataset_id=False, wms_alternate_server=None,
+                target_files=None, check_replica=True, split_update=100):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -361,9 +376,6 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         if set_dataset_id is True, this decides whether the default value
         constructed by the crawler takes precedence over the dataset_id in
         the NetCDF file.
-    internal_ip : string
-    external_ip : string
-    output_internal_ip : bool
     wms_alternate_server : string
     target_files : list of string
         only those file names will be crawled. If this is provided, all target
@@ -372,6 +384,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         if True, will search for identical file names and dataset_id in solr
         and tag this instance as replica=True if it already exists on
         another thredds server.
+    split_update : int
+        how many datasets will be updated per solr request.
 
     Returns
     -------
@@ -393,12 +407,11 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                                ignored_variables=ignored_variables,
                                set_dataset_id=set_dataset_id,
                                overwrite_dataset_id=overwrite_dataset_id,
-                               internal_ip=internal_ip,
-                               external_ip=external_ip,
-                               output_internal_ip=output_internal_ip,
                                wms_alternate_server=wms_alternate_server,
                                target_files=target_files)
 
+    solr_response = {'responseHeader':
+                     {'QTime': 0, 'status': 0, 'Nquery': 0}}
     # check for replica
     if check_replica:
         add_raw = []
@@ -406,13 +419,16 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         for doc in add_data:
             json_result = pavicsearch(
                 solr_server, limit=1000, search_type='File',
-                query="{0}%20AND%20{1}".format(
+                query="{0} AND {1}".format(
                     doc['title'], doc['dataset_id']))
             search_dict = json.loads(json_result)
             if search_dict['response']['docs']:
                 for indexed_doc in search_dict['response']['docs']:
                     # Here, checking that the free-query above really returned
                     # exact results for title and dataset_id.
+                    # if dataset_id is not already a key in solr, this will
+                    # return a KeyError... but every entry should have one if
+                    # it was done with the crawler...
                     if indexed_doc['title'] == doc['title'] and \
                        indexed_doc['dataset_id'] == doc['dataset_id'] and \
                        indexed_doc['source'] == doc['source']:
@@ -423,15 +439,20 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                     add_raw.append(doc)
             else:
                 add_raw.append(doc)
-        update_result = solr_update(solr_server, add_raw)
+
+        if add_raw:
+            solr_response = _split_solr_update(solr_server, add_raw,
+                                               split_update)
         for doc in add_refresh:
             update_result = pavicsupdate(solr_server, doc)
-        # Here, since the last update result is returned, QTime will not be
-        # cumulative, and there is no information on the number of calls
-        # to solr made...
-        return update_result
+            solr_response = aggregate_solr_responses(solr_response,
+                                                     update_result)
+        return solr_response
     else:
-        return solr_update(solr_server, add_data)
+        if add_data:
+            solr_response = _split_solr_update(solr_server, add_data,
+                                               split_update)
+        return solr_response
 
 
 def pavicsvalidate(solr_server, required_facets, limit_paths=None,
@@ -487,17 +508,16 @@ def pavicsvalidate(solr_server, required_facets, limit_paths=None,
                 limit_search = limit_search + limit_file + '+OR+'
             limit_search = limit_search[:-4] + ')'
         if limit_search != '':
-            warp = (limit_search, str(n), str(n + nrows))
-            my_search = 'q=%s&start=%s&rows=%s&wt=json' % warp
+            my_search = 'q={0}&start={1}&rows={2}&wt=json'.format(
+                limit_search, str(n), str(n + nrows))
         else:
-            warp = (str(n), str(n + nrows))
-            my_search = 'q=*:*&start=%s&rows=%s&wt=json' % warp
-        my_url = solr_server + "select?%s" % (my_search,)
-        url_request = Request(url=my_url)
-        url_response = urlopen(url_request)
-        search_result = url_response.read()
-        url_response.close()
-        search_dict = json.loads(search_result)
+            my_search = 'q=*:*&start={0}&rows={1}&wt=json'.format(
+                str(n), str(n + nrows))
+        solr_call = os.path.join(solr_server, 'select?{0}'.format(my_search))
+        r = requests.get(solr_call)
+        if not r.ok:
+            r.raise_for_status()
+        search_dict = r.json()
         if not len(search_dict['response']['docs']):
             break
         for doc in search_dict['response']['docs']:
@@ -555,14 +575,15 @@ def pavicsupdate(solr_server, update_dict):
 
     # Get all the information of the current Solr document
     if 'id' in update_dict:
-        my_search = "q=id:%s&wt=json" % (update_dict['id'])
+        my_search = "q=id:{0}&wt=json".format(update_dict['id'])
     elif 'dataset_id' in update_dict:
-        my_search = "q=dataset_id:%s&wt=json" % (update_dict['dataset_id'])
-    url_request = Request(url=solr_server + "select?%s" % (my_search,))
-    url_response = urlopen(url_request)
-    search_result = url_response.read()
-    url_response.close()
-    search_dict = json.loads(search_result)
+        my_search = "q=dataset_id:{0}&wt=json".format(
+            update_dict['dataset_id'])
+    solr_call = os.path.join(solr_server, 'select?{0}'.format(my_search))
+    r = requests.get(solr_call)
+    if not r.ok:
+        r.raise_for_status()
+    search_dict = r.json()
     data = search_dict['response']['docs']
     # Remove self-generated fields
     for doc in data:
@@ -576,7 +597,7 @@ def pavicsupdate(solr_server, update_dict):
 
 
 def datasets_from_solr_search(solr_search_result):
-    """Convert a Solr search result on files to a dataset search result.
+    """Convert a Solr search result on files to a Dataset search result.
 
     Parameters
     ----------
@@ -586,7 +607,47 @@ def datasets_from_solr_search(solr_search_result):
     Returns
     -------
     out : string
-        restructured json response for dataset representation
+        restructured json response for Dataset representation
+
+    """
+
+    # The ESGF actually maintains a different solr table for datasets...
+    search_results = json.loads(solr_search_result)
+    known_datasets = []
+    first_instances = []
+    for i, doc in enumerate(search_results['response']['docs']):
+        if doc['dataset_id'] in known_datasets:
+            continue
+        else:
+            known_datasets.append(doc['dataset_id'])
+            first_instances.append(i)
+            # This is something else in ESGF...
+            # doc['url'] = [doc['url']]
+            doc['type'] = 'Dataset'
+            for key in ['abstract', 'id', 'last_modified', 'resourcename',
+                        'title', 'wms_url', 'catalog_url', 'opendap_url',
+                        'fileserver_url']:
+                doc.pop(key, None)
+    for i in range(len(search_results['response']['docs']) - 1, -1, -1):
+        if i not in first_instances:
+            search_results['response']['docs'].pop(i)
+    n = len(search_results['response']['docs'])
+    search_results['response']['numFound'] = n
+    return json.dumps(search_results)
+
+
+def aggregate_from_solr_search(solr_search_result):
+    """Convert a Solr search result on files to an aggregate search result.
+
+    Parameters
+    ----------
+    solr_search_result : string
+        the json text result from a Solr query
+
+    Returns
+    -------
+    out : string
+        restructured json response for aggregate representation
 
     """
 
@@ -597,10 +658,13 @@ def datasets_from_solr_search(solr_search_result):
         if doc['dataset_id'] in known_datasets:
             refi = first_instances[known_datasets.index(doc['dataset_id'])]
             ref_doc = search_results['response']['docs'][refi]
-            ref_doc['catalog_urls'].append(doc['catalog_url'])
-            ref_doc['opendap_urls'].append(doc['opendap_url'])
-            ref_doc['urls'].append(doc['url'])
-            ref_doc['wms_urls'].append(doc['wms_url'])
+            ref_doc['catalog_url'].append(doc['catalog_url'])
+            ref_doc['opendap_url'].append(doc['opendap_url'])
+            ref_doc['fileserver_url'].append(doc['fileserver_url'])
+            ref_doc['url'].append(doc['url'])
+            ref_doc['wms_url'].append(doc['wms_url'])
+            ref_doc['datetime_min'].append(doc['datetime_min'])
+            ref_doc['datetime_max'].append(doc['datetime_max'])
             for key in ['variable', 'variable_long_name', 'units',
                         'cf_standard_name']:
                 for var_name in doc[key]:
@@ -609,7 +673,7 @@ def datasets_from_solr_search(solr_search_result):
             for var_name in doc['cf_standard_name']:
                 if var_name not in ref_doc['keywords']:
                     ref_doc['keywords'].append(var_name)
-            # Fetching min/max from multiple files
+            # Fetching min/max from multiple files, obsolete?
             if 'data_min' in doc:
                 for j, one_min in enumerate(doc['data_min']):
                     if float(one_min) < float(ref_doc['data_min'][j]):
@@ -621,19 +685,25 @@ def datasets_from_solr_search(solr_search_result):
         else:
             known_datasets.append(doc['dataset_id'])
             first_instances.append(i)
-            doc['catalog_urls'] = [doc['catalog_url']]
-            doc['opendap_urls'] = [doc['opendap_url']]
-            doc['urls'] = [doc['url']]
-            doc['wms_urls'] = [doc['wms_url']]
-            for key in ['abstract', 'catalog_url', 'id', 'last_modified',
-                        'opendap_url', 'resourcename', 'title', 'url',
-                        'wms_url']:
+            doc['catalog_url'] = [doc['catalog_url']]
+            doc['opendap_url'] = [doc['opendap_url']]
+            doc['fileserver_url'] = [doc['fileserver_url']]
+            doc['url'] = [doc['url']]
+            doc['wms_url'] = [doc['wms_url']]
+            doc['datetime_min'] = [doc['datetime_min']]
+            doc['datetime_max'] = [doc['datetime_max']]
+            doc['type'] = 'Aggregate'
+            for key in ['abstract', 'id', 'last_modified', 'resourcename',
+                        'title']:
                 doc.pop(key, None)
     for i in range(len(search_results['response']['docs']) - 1, -1, -1):
         if i not in first_instances:
             search_results['response']['docs'].pop(i)
     for doc in search_results['response']['docs']:
-        for key in ['catalog_urls', 'opendap_urls', 'urls', 'wms_urls']:
+        for key in ['catalog_url', 'opendap_url', 'fileserver_url', 'url',
+                    'wms_url', 'datetime_max', 'datetime_min']:
+            # This assumes that everything orders nicely based on urls
+            # and time continuity in files...
             doc[key].sort()
     n = len(search_results['response']['docs'])
     search_results['response']['numFound'] = n
@@ -701,7 +771,7 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     else:
         raise NotImplementedError()
     if fields is not None:
-        my_search += "&fl=%s" % (fields,)
+        my_search += "&fl={0}".format(fields)
     if constraints is not None:
         constraints = constraints.split(',')
         for constraint in constraints:
@@ -710,20 +780,24 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
             # once, it is an OR statement, this should be added
             # eventually. Similarly, there is support for not equal
             # != ...
-            my_query += '+%s:%s' % (keyval[0], keyval[1])
+            my_query += '+{0}:{1}'.format(keyval[0], keyval[1])
     if query is not None:
-        my_query += '+%s' % (query,)
+        my_query += '+{0}'.format(query)
     my_search += "&indent=true"
     if my_query != '&q=':
         my_search += my_query
     my_search = my_search.lstrip('&')
-    url_request = Request(url=solr_server + 'select?' + my_search)
-    url_request.add_header('Content-type', 'application/json')
-    url_response = urlopen(url_request)
-    search_result = url_response.read()
-    url_response.close()
+    solr_call = os.path.join(solr_server, 'select?{0}'.format(my_search))
+    r = requests.get(solr_call)
+    if not r.ok:
+        r.raise_for_status()
+    search_result = r.text
     if search_type == 'Dataset':
         if output_format == 'application:solr+xml':
             raise NotImplementedError()
         search_result = datasets_from_solr_search(search_result)
+    elif search_type == 'Aggregate':
+        if output_format == 'application:solr+xml':
+            raise NotImplementedError()
+        search_result = aggregate_from_solr_search(search_result)
     return search_result
