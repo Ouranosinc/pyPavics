@@ -1008,3 +1008,51 @@ def period2indices(initial_date, final_date, nc_file, calendar=None):
     index_fin = netCDF4.date2index(final_nctime, nctime, calendar=calendar,
                                    select='before')
     return {'initial_index': index_ini, 'final_index': index_fin}
+
+
+def guess_main_variable(ncdataset):
+    """Guess main variable in a NetCDF file.
+
+    Parameters
+    ----------
+    ncdataset : netCDF4.Dataset
+
+    Returns
+    -------
+    out : string
+        name of main variable
+
+    Notes
+    -----
+    The main variable is the one with highest dimensionality, if there are
+    more than one, the one with larger size is the main variable. If there is
+    still a tie, the first one in ncdataset.variables is chosen. The
+    time, lon, lat variables and variables that are defined as bounds are
+    automatically ignored.
+
+    """
+
+    var_candidates = []
+    bnds_variables = []
+    for var_name in ncdataset.variables:
+        if var_name in ['time', 'lon', 'lat']:
+            continue
+        ncvar = ncdataset.variables[var_name]
+        if hasattr(ncvar, 'bounds'):
+            bnds_variables.append(ncvar.bounds)
+        var_candidates.append(var_name)
+    var_candidates = list(set(var_candidates) - set(bnds_variables))
+
+    # Find main variable among the candidates
+    nd = -1
+    size = -1
+    for var_name in var_candidates:
+        ncvar = ncdataset.variables[var_name]
+        if len(ncvar.shape) > nd:
+            main_var = var_name
+            nd = len(ncvar.shape)
+            size = ncvar.size
+        elif (len(ncvar.shape) == nd) and (ncvar.size > size):
+            main_var = var_name
+            size = ncvar.size
+    return main_var

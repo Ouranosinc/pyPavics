@@ -215,3 +215,16 @@ def nearest_time(nc_files, t, threshold=None):
         return _nearest_time_from_netcdf_time_units(nc_files, t, threshold)
     else:
         raise NotImplementedError()
+
+
+def time_start_end(nc_resource):
+    if 'time' in nc_resource.variables:
+        nctime = nc_resource.variables['time']
+        nccalendar = getattr(nctime, 'calendar', 'gregorian')
+        datetime_min = netCDF4.num2date(
+            nctime[0], nctime.units, nccalendar)
+        datetime_max = netCDF4.num2date(
+            nctime[-1], nctime.units, nccalendar)
+        return (datetime_min, datetime_max)
+    else:
+        return (None, None)
