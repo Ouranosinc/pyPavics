@@ -30,6 +30,12 @@ from . import slicetools
 logger = logging.getLogger(__name__)
 
 
+# These definitions should be moved to a config file
+variables_default_min_max = {
+    'pr': (0, 0.0001, 'seq-Blues'),
+    'tas': (253.13, 293.13, 'div-BuRd')}
+
+
 class MissingThreddsFile(Exception):
     pass
 
