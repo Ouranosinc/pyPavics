@@ -39,6 +39,10 @@ netcdf_ignored_variables = [
     'yc_bnds', 'xc_bnds', 'yc_bounds', 'xc_bounds', 'rlat_bnds', 'rlat_bounds',
     'rlon_bnds', 'rlon_bounds', 'level', 'level_bnds', 'level_bounds', 'plev']
 
+variables_default_min_max = {
+    'pr': (0, 0.0001, 'seq-Blues'),
+    'tas': (253.13, 293.13, 'div-BuRd')}
+
 
 class MissingThreddsFile(Exception):
     pass
