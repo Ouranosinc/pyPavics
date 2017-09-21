@@ -805,3 +805,28 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
             raise NotImplementedError()
         search_result = aggregate_from_solr_search(search_result)
     return search_result
+
+
+def list_of_files_from_pavicsearch(search_result):
+    """List of file from a pavicsearch result.
+
+    Parameters
+    ----------
+    search_result : string
+        output from pavicsearch
+
+    Returns
+    -------
+    out : string
+        json of list of opendap urls from the search result
+
+    """
+
+    json_result = json.loads(search_result)
+    list_of_files = []
+    for doc in json_result['response']['docs']:
+        if hasattr(doc['opendap_url'], 'append'):
+            list_of_files.extend(doc['opendap_url'])
+        else:
+            list_of_files.append(doc['opendap_url'])
+    return json.dumps(list_of_files)
