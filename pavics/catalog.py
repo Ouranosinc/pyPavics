@@ -41,7 +41,19 @@ netcdf_ignored_variables = [
 
 variables_default_min_max = {
     'pr': (0, 0.0001, 'seq-Blues'),
-    'tas': (253.13, 293.13, 'div-BuRd')}
+    'tas': (253.15, 293.15, 'div-BuRd')}
+
+# In ESGF this is a config file for each node /esgf/config/facets.properties
+default_facets = [
+    'author', 'category', 'cf_standard_name', 'experiment', 'frequency',
+    'institute', 'model', 'project', 'source', 'subject', 'title', 'units',
+    'variable', 'variable_long_name']
+
+solr_self_generating_fields = ['id', '_version_', 'keywords', 'abstract']
+
+birdhouse_solr_attr_mapping = {'cf_standard_name': 'standard_name',
+                               'variable_long_name': 'long_name',
+                               'units': 'units'}
 
 
 class MissingThreddsFile(Exception):
@@ -113,7 +125,7 @@ def solr_add_field(solr_server, field_name, field_type='string',
                                    'stored': 'true'}}
     headers = {'Content-type': 'application/json'}
     r = requests.post(schema_path, data=json.dumps(add_field), headers=headers)
-    return r._content
+    return r.json()
 
 
 def solr_update(solr_server, update_data):
@@ -315,30 +327,15 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                 # if there is no standard name, long_name or units, ignore it
                 if not (ccf or clong or cunits):
                     continue
-                for parameter_name in ['variable', 'cf_standard_name',
-                                       'variable_long_name', 'units',
-                                       'has_time']:
-                    if parameter_name not in doc:
-                        doc[parameter_name] = []
-                doc['variable'].append(var_name)
-                if ccf:
-                    value = getattr(ncvar, 'standard_name')
-                    doc['cf_standard_name'].append(value)
+                if 'variable' not in doc:
+                    doc['variable'] = [var_name]
                 else:
-                    doc['cf_standard_name'].append('_undefined')
-                if clong:
-                    value = getattr(ncvar, 'long_name')
-                    doc['variable_long_name'].append(value)
-                else:
-                    doc['variable_long_name'].append('_undefined')
-                if ccf:
-                    doc['units'].append(getattr(ncvar, 'units'))
-                else:
-                    doc['units'].append('_undefined')
-                if 'time' in ncvar.dimensions:
-                    doc['has_time'].append(1)
-                else:
-                    doc['has_time'].append(0)
+                    doc['variable'].append(var_name)
+                for (bh_attr, attr) in birdhouse_solr_attr_mapping.items():
+                    if bh_attr not in doc:
+                        doc[bh_attr] = []
+                    doc[bh_attr].append(
+                        getattr(ncvar, attr, '_undefined'))
         nc.close()
         add_data.append(doc)
 
@@ -591,7 +588,7 @@ def pavicsupdate(solr_server, update_dict):
     data = search_dict['response']['docs']
     # Remove self-generated fields
     for doc in data:
-        for key in ['id', '_version_', 'keywords', 'abstract']:
+        for key in solr_self_generating_fields:
             doc.pop(key, None)
         for (key, value) in update_dict.items():
             if key == 'id':
@@ -659,58 +656,66 @@ def aggregate_from_solr_search(solr_search_result):
     known_datasets = []
     first_instances = []
     for i, doc in enumerate(search_results['response']['docs']):
+        # Not sure dataset_id should be used for this purpose, may be
+        # changed in the future...
         if doc['dataset_id'] in known_datasets:
             refi = first_instances[known_datasets.index(doc['dataset_id'])]
             ref_doc = search_results['response']['docs'][refi]
-            ref_doc['catalog_url'].append(doc['catalog_url'])
-            ref_doc['opendap_url'].append(doc['opendap_url'])
-            ref_doc['fileserver_url'].append(doc['fileserver_url'])
-            ref_doc['url'].append(doc['url'])
-            ref_doc['wms_url'].append(doc['wms_url'])
-            ref_doc['datetime_min'].append(doc['datetime_min'])
-            ref_doc['datetime_max'].append(doc['datetime_max'])
-            for key in ['variable', 'variable_long_name', 'units',
-                        'cf_standard_name']:
-                for var_name in doc[key]:
-                    if var_name not in ref_doc[key]:
-                        ref_doc[key].append(var_name)
-            for var_name in doc['cf_standard_name']:
-                if var_name not in ref_doc['keywords']:
-                    ref_doc['keywords'].append(var_name)
-            # Fetching min/max from multiple files, obsolete?
-            if 'data_min' in doc:
-                for j, one_min in enumerate(doc['data_min']):
-                    if float(one_min) < float(ref_doc['data_min'][j]):
-                        ref_doc['data_min'][j] = one_min
-            if 'data_max' in doc:
-                for j, one_max in enumerate(doc['data_max']):
-                    if float(one_max) > float(ref_doc['data_max'][j]):
-                        ref_doc['data_max'][j] = one_max
+            for attr in doc:
+                if hasattr(ref_doc[attr], 'append'):
+                    if not hasattr(doc[attr], 'append'):
+                        ref_doc[attr].append(doc[attr])
+                    else:
+                        for attr_value in doc[attr]:
+                            if attr_value not in ref_doc[attr]:
+                                ref_doc[attr].append(attr_value)
         else:
+            # Not sure dataset_id should be used for this purpose, may be
+            # changed in the future...
             known_datasets.append(doc['dataset_id'])
             first_instances.append(i)
-            doc['catalog_url'] = [doc['catalog_url']]
-            doc['opendap_url'] = [doc['opendap_url']]
-            doc['fileserver_url'] = [doc['fileserver_url']]
-            doc['url'] = [doc['url']]
-            doc['wms_url'] = [doc['wms_url']]
-            doc['datetime_min'] = [doc['datetime_min']]
-            doc['datetime_max'] = [doc['datetime_max']]
+            for attr in doc:
+                if not hasattr(doc[attr], 'append'):
+                    doc[attr] = [doc[attr]]
             doc['type'] = 'Aggregate'
-            for key in ['abstract', 'id', 'last_modified', 'resourcename',
-                        'title']:
-                doc.pop(key, None)
+            doc['aggregate_title'] = doc['dataset_id'][0]
     for i in range(len(search_results['response']['docs']) - 1, -1, -1):
         if i not in first_instances:
             search_results['response']['docs'].pop(i)
+
+    # reorder based on opendap_url name
     for doc in search_results['response']['docs']:
-        for key in ['catalog_url', 'opendap_url', 'fileserver_url', 'url',
-                    'wms_url', 'datetime_max', 'datetime_min']:
-            # This assumes that everything orders nicely based on urls
-            # and time continuity in files...
-            doc[key].sort()
+        order_attr = doc['opendap_url']
+        for (attr, value) in doc.items():
+            if hasattr(value, 'append') and (len(value) == len(order_attr)):
+                doc[attr] = [x for (_, x) in sorted(zip(order_attr, value))]
+
     n = len(search_results['response']['docs'])
     search_results['response']['numFound'] = n
+    return json.dumps(search_results)
+
+
+def file_as_aggregate_from_solr_search(solr_search_result):
+    """Convert a Solr search result on files to Aggregate structure.
+
+    Parameters
+    ----------
+    solr_search_result : string
+        the json text result from a Solr query
+
+    Returns
+    -------
+    out : string
+        restructured json response for Aggregate representation
+
+    """
+
+    search_results = json.loads(solr_search_result)
+    for doc in search_results['response']['docs']:
+        for attr in doc:
+            if not hasattr(doc[attr], 'append'):
+                doc[attr] = [doc[attr]]
+        doc['aggregate_title'] = doc['title'][0]
     return json.dumps(search_results)
 
 
@@ -731,7 +736,7 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     offset : int
         where to start in the document count of the Solr search
     search_type : string
-        one of 'Dataset' or 'File'
+        one of 'Dataset', 'File', 'Aggregate' or 'FileAsAggregate'
     output_format : string
         one of 'application/solr+json' or 'application:solr+xml'
     fields : string
@@ -756,23 +761,15 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
         if facets != '*':
             facets = facets.split(',')
         else:
-            # how do we know what all the fields are?
-            # manual input for now...
-            # In ESGF this is is a config file for each node
-            # /esgf/config/facets.propertires
-            facets = ['author', 'category', 'cf_standard_name', 'experiment',
-                      'frequency', 'institute', 'model', 'project', 'source',
-                      'subject', 'title', 'units', 'variable',
-                      'variable_long_name']
+            facets = default_facets
         for facet in facets:
             my_search += "&facet.field=%s" % (facet,)
     my_search += "&rows=%s" % (limit,)
     my_search += "&start=%s" % (offset,)
-    if output_format == 'application:solr+xml':
-        my_search += "&wt=xml"
-    elif output_format == 'application/solr+json':
+    if output_format == 'application/solr+json':
         my_search += "&wt=json"
     else:
+        # No longer supporting application:solr+xml (&wt=xml)
         raise NotImplementedError()
     if fields is not None:
         my_search += "&fl={0}".format(fields)
@@ -797,13 +794,11 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
         r.raise_for_status()
     search_result = r.text
     if search_type == 'Dataset':
-        if output_format == 'application:solr+xml':
-            raise NotImplementedError()
         search_result = datasets_from_solr_search(search_result)
     elif search_type == 'Aggregate':
-        if output_format == 'application:solr+xml':
-            raise NotImplementedError()
         search_result = aggregate_from_solr_search(search_result)
+    elif search_type == 'FileAsAggregate':
+        search_result = file_as_aggregate_from_solr_search(search_result)
     return search_result
 
 
