@@ -420,7 +420,7 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         for doc in add_data:
             json_result = pavicsearch(
                 solr_server, limit=1000, search_type='File',
-                query="{0} AND {1}".format(
+                add_default_min_max=False, query="{0} AND {1}".format(
                     doc['title'], doc['dataset_id']))
             search_dict = json.loads(json_result)
             if search_dict['response']['docs']:
@@ -736,6 +736,8 @@ def add_default_min_max_to_solr_search(solr_search_result):
 
     search_results = json.loads(solr_search_result)
     for doc in search_results['response']['docs']:
+        if not 'variable' in doc:
+            continue
         doc['variable_min'] = []
         doc['variable_max'] = []
         doc['variable_palette'] = []
@@ -750,7 +752,8 @@ def add_default_min_max_to_solr_search(solr_search_result):
 
 def pavicsearch(solr_server, facets=None, limit=10, offset=0,
                 search_type='Dataset', output_format='application/solr+json',
-                fields=None, constraints=None, query=None,):
+                fields=None, constraints=None, query=None,
+                add_default_min_max=True):
     """Search Solr database.
 
     Parameters
@@ -775,6 +778,8 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
         by colon (e.g. model:CRCM4,experiment:rcp85)
     query : string
         direct query to the Solr database
+    add_default_min_max : bool
+        whether to add default color palette information to search result
 
     Returns
     -------
@@ -822,7 +827,8 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     if not r.ok:
         r.raise_for_status()
     search_result = r.text
-    search_result = add_default_min_max_to_solr_search(search_result)
+    if add_default_min_max:
+        search_result = add_default_min_max_to_solr_search(search_result)
     if search_type == 'Dataset':
         search_result = datasets_from_solr_search(search_result)
     elif search_type == 'Aggregate':
