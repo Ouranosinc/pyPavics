@@ -418,11 +418,10 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         add_raw = []
         add_refresh = []
         for doc in add_data:
-            json_result = pavicsearch(
+            search_dict = pavicsearch(
                 solr_server, limit=1000, search_type='File',
                 add_default_min_max=False, query="{0} AND {1}".format(
                     doc['title'], doc['dataset_id']))
-            search_dict = json.loads(json_result)
             if search_dict['response']['docs']:
                 for indexed_doc in search_dict['response']['docs']:
                     # Here, checking that the free-query above really returned
@@ -603,7 +602,7 @@ def datasets_from_solr_search(solr_search_result):
     Parameters
     ----------
     solr_search_result : string
-        the json text result from a Solr query
+        the json structure from a Solr query
 
     Returns
     -------
@@ -613,7 +612,7 @@ def datasets_from_solr_search(solr_search_result):
     """
 
     # The ESGF actually maintains a different solr table for datasets...
-    search_results = json.loads(solr_search_result)
+    search_results = copy.deepcopy(solr_search_result)
     known_datasets = []
     first_instances = []
     for i, doc in enumerate(search_results['response']['docs']):
@@ -634,7 +633,7 @@ def datasets_from_solr_search(solr_search_result):
             search_results['response']['docs'].pop(i)
     n = len(search_results['response']['docs'])
     search_results['response']['numFound'] = n
-    return json.dumps(search_results)
+    return search_results
 
 
 def aggregate_from_solr_search(solr_search_result):
@@ -643,7 +642,7 @@ def aggregate_from_solr_search(solr_search_result):
     Parameters
     ----------
     solr_search_result : string
-        the json text result from a Solr query
+        the json structure result from a Solr query
 
     Returns
     -------
@@ -652,7 +651,7 @@ def aggregate_from_solr_search(solr_search_result):
 
     """
 
-    search_results = json.loads(solr_search_result)
+    search_results = copy.deepcopy(solr_search_result)
     known_datasets = []
     first_instances = []
     for i, doc in enumerate(search_results['response']['docs']):
@@ -692,7 +691,7 @@ def aggregate_from_solr_search(solr_search_result):
 
     n = len(search_results['response']['docs'])
     search_results['response']['numFound'] = n
-    return json.dumps(search_results)
+    return search_results
 
 
 def file_as_aggregate_from_solr_search(solr_search_result):
@@ -701,7 +700,7 @@ def file_as_aggregate_from_solr_search(solr_search_result):
     Parameters
     ----------
     solr_search_result : string
-        the json text result from a Solr query
+        the json structure result from a Solr query
 
     Returns
     -------
@@ -710,13 +709,13 @@ def file_as_aggregate_from_solr_search(solr_search_result):
 
     """
 
-    search_results = json.loads(solr_search_result)
+    search_results = copy.deepcopy(solr_search_result)
     for doc in search_results['response']['docs']:
         for attr in doc:
             if not hasattr(doc[attr], 'append'):
                 doc[attr] = [doc[attr]]
         doc['aggregate_title'] = doc['title'][0]
-    return json.dumps(search_results)
+    return search_results
 
 
 def add_default_min_max_to_solr_search(solr_search_result):
@@ -725,7 +724,7 @@ def add_default_min_max_to_solr_search(solr_search_result):
     Parameters
     ----------
     solr_search_result : string
-        the json text result from a Solr query
+        the json structure result from a Solr query
 
     Returns
     -------
@@ -734,7 +733,7 @@ def add_default_min_max_to_solr_search(solr_search_result):
 
     """
 
-    search_results = json.loads(solr_search_result)
+    search_results = copy.deepcopy(solr_search_result)
     for doc in search_results['response']['docs']:
         if not 'variable' in doc:
             continue
@@ -747,7 +746,7 @@ def add_default_min_max_to_solr_search(solr_search_result):
             doc['variable_min'].append(min_max[0])
             doc['variable_max'].append(min_max[1])
             doc['variable_palette'].append(min_max[2])
-    return json.dumps(search_results)
+    return search_results
 
 
 def pavicsearch(solr_server, facets=None, limit=10, offset=0,
@@ -784,7 +783,7 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     Returns
     -------
     out : string
-        json (default) or xml response from the Solr server
+        json response from the Solr server
 
     """
 
@@ -826,7 +825,7 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     r = requests.get(solr_call)
     if not r.ok:
         r.raise_for_status()
-    search_result = r.text
+    search_result = r.json
     if add_default_min_max:
         search_result = add_default_min_max_to_solr_search(search_result)
     if search_type == 'Dataset':
@@ -853,11 +852,10 @@ def list_of_files_from_pavicsearch(search_result):
 
     """
 
-    json_result = json.loads(search_result)
     list_of_files = []
-    for doc in json_result['response']['docs']:
+    for doc in search_result['response']['docs']:
         if hasattr(doc['opendap_url'], 'append'):
             list_of_files.extend(doc['opendap_url'])
         else:
             list_of_files.append(doc['opendap_url'])
-    return json.dumps(list_of_files)
+    return list_of_files
