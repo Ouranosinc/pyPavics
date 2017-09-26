@@ -735,7 +735,7 @@ def add_default_min_max_to_solr_search(solr_search_result):
 
     search_results = copy.deepcopy(solr_search_result)
     for doc in search_results['response']['docs']:
-        if not 'variable' in doc:
+        if 'variable' not in doc:
             continue
         doc['variable_min'] = []
         doc['variable_max'] = []
@@ -825,7 +825,7 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     r = requests.get(solr_call)
     if not r.ok:
         r.raise_for_status()
-    search_result = r.json
+    search_result = r.json()
     if add_default_min_max:
         search_result = add_default_min_max_to_solr_search(search_result)
     if search_type == 'Dataset':
