@@ -719,6 +719,35 @@ def file_as_aggregate_from_solr_search(solr_search_result):
     return json.dumps(search_results)
 
 
+def add_default_min_max_to_solr_search(solr_search_result):
+    """Add default variables min, max and color palette.
+
+    Parameters
+    ----------
+    solr_search_result : string
+        the json text result from a Solr query
+
+    Returns
+    -------
+    out : string
+        json response with added parameters
+
+    """
+
+    search_results = json.loads(solr_search_result)
+    for doc in search_results['response']['docs']:
+        doc['variable_min'] = []
+        doc['variable_max'] = []
+        doc['variable_palette'] = []
+        for i, var_name in enumerate(doc['variable']):
+            min_max = variables_default_min_max.get(
+                var_name, (0, 1, 'default'))
+            doc['variable_min'].append(min_max[0])
+            doc['variable_max'].append(min_max[1])
+            doc['variable_palette'].append(min_max[2])
+    return json.dumps(search_results)
+
+
 def pavicsearch(solr_server, facets=None, limit=10, offset=0,
                 search_type='Dataset', output_format='application/solr+json',
                 fields=None, constraints=None, query=None,):
@@ -793,6 +822,7 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     if not r.ok:
         r.raise_for_status()
     search_result = r.text
+    search_result = add_default_min_max_to_solr_search(search_result)
     if search_type == 'Dataset':
         search_result = datasets_from_solr_search(search_result)
     elif search_type == 'Aggregate':
