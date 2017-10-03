@@ -55,6 +55,15 @@ birdhouse_solr_attr_mapping = {'cf_standard_name': 'standard_name',
                                'variable_long_name': 'long_name',
                                'units': 'units'}
 
+aggregate_solr_fields = ['resourcename', 'abstract', 'wms_url', 'datetime_max',
+                         'id', 'opendap_url', 'title', 'datetime_min',
+                         '_version_', 'catalog_url', 'last_modified',
+                         'url', 'fileserver_url']
+
+reduce_solr_fields = ['cf_standard_name', 'units', 'variable',
+                      'variable_long_name', 'variable_max', 'variable_min',
+                      'variable_palette']
+
 
 class MissingThreddsFile(Exception):
     pass
@@ -661,30 +670,31 @@ def aggregate_from_solr_search(solr_search_result):
             refi = first_instances[known_datasets.index(doc['dataset_id'])]
             ref_doc = search_results['response']['docs'][refi]
             for attr in doc:
-                if hasattr(ref_doc[attr], 'append'):
-                    if not hasattr(doc[attr], 'append'):
-                        ref_doc[attr].append(doc[attr])
-                    else:
-                        for attr_value in doc[attr]:
-                            if attr_value not in ref_doc[attr]:
-                                ref_doc[attr].append(attr_value)
+                if attr in aggregate_solr_fields:
+                    ref_doc[attr].append(doc[attr])
         else:
             # Not sure dataset_id should be used for this purpose, may be
             # changed in the future...
             known_datasets.append(doc['dataset_id'])
             first_instances.append(i)
             for attr in doc:
-                if not hasattr(doc[attr], 'append'):
+                if attr in aggregate_solr_fields:
                     doc[attr] = [doc[attr]]
+                elif attr in reduce_solr_fields:
+                    # Validate should verify that those are all length 1
+                    doc[attr] = doc[attr][0]
             doc['type'] = 'Aggregate'
-            doc['aggregate_title'] = doc['dataset_id'][0]
+            doc['aggregate_title'] = doc['dataset_id']
     for i in range(len(search_results['response']['docs']) - 1, -1, -1):
         if i not in first_instances:
             search_results['response']['docs'].pop(i)
 
     # reorder based on opendap_url name
+    # also reduce lists with repeating values for all files
     for doc in search_results['response']['docs']:
         order_attr = doc['opendap_url']
+        if len(order_attr) == 1:
+            doc['type'] = 'FileAsAggregate'
         for (attr, value) in doc.items():
             if hasattr(value, 'append') and (len(value) == len(order_attr)):
                 doc[attr] = [x for (_, x) in sorted(zip(order_attr, value))]
