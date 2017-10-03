@@ -712,6 +712,8 @@ def file_as_aggregate_from_solr_search(solr_search_result):
     search_results = copy.deepcopy(solr_search_result)
     for doc in search_results['response']['docs']:
         for attr in doc:
+            if attr == 'type':
+                continue
             if not hasattr(doc[attr], 'append'):
                 doc[attr] = [doc[attr]]
         doc['aggregate_title'] = doc['title'][0]
