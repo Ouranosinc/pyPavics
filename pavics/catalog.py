@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 
 # These definitions should be moved to a config file
-solr_fields_type = {'datetime_max': 'long',
-                    'datetime_min': 'long',
+solr_fields_type = {'datetime_max': 'date',
+                    'datetime_min': 'date',
                     'latest': 'boolean',
                     'replica': 'boolean'}
 
@@ -317,13 +317,14 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 
         # Datetime min/max
         if datetime_min:
-            # Apparently, calendar.timegm can take dates from irregular
-            # calendars. 2003-03-01 & 2003-02-29 (not a valid gregorian date)
-            # both return the same result...
-            # Not sure what happens to time zones here...
-            doc['datetime_min'] = calendar.timegm(datetime_min.timetuple())
+            # Time zones are not supported by that function...
+            # Plus solr only supports UTC:
+            # https://lucene.apache.org/solr/guide/6_6/working-with-dates.html
+            doc['datetime_min'] = nctime.nc_datetime_to_iso(
+                datetime_min, force_gregorian_date=True) + 'Z'
         if datetime_max:
-            doc['datetime_max'] = calendar.timegm(datetime_max.timetuple())
+            doc['datetime_max'] = nctime.nc_datetime_to_iso(
+                datetime_max, force_gregorian_date=True) + 'Z'
 
         if ignored_variables != 'all':
             for var_name in nc.variables:
