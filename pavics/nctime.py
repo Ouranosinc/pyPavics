@@ -218,6 +218,19 @@ def nearest_time(nc_files, t, threshold=None):
 
 
 def time_start_end(nc_resource):
+    """Retrieve start and end date in a NetCDF file.
+
+    Parameters
+    ----------
+    nc_resource : netCDF4._netCDF4.Dataset
+
+    Returns
+    -------
+    out : (netcdftime._datetime.datetime, netcdftime._datetime.datetime)
+        Tuple with start date and end date.
+
+    """
+
     if 'time' in nc_resource.variables:
         nctime = nc_resource.variables['time']
         nccalendar = getattr(nctime, 'calendar', 'gregorian')
@@ -228,3 +241,61 @@ def time_start_end(nc_resource):
         return (datetime_min, datetime_max)
     else:
         return (None, None)
+
+
+def nc_datetime_to_iso(nc_datetime, force_gregorian_date=False,
+                       raise_non_gregorian_dates=False):
+    """Convert a NetCDF datetime to ISO format.
+
+    Parameters
+    ----------
+    nc_datetime : netcdftime._datetime.datetime
+    force_gregorian_date : bool
+        Force output to be a valid gregorian calendar date. Only use this
+        if you know what you are doing, information will be lost about dates
+        in other valid CF-Convention calendars. In those cases, a nearest
+        gregorian date is forged.
+    raise_non_gregorian_dates : bool
+        In combination with force_gregorian_date, will raise an error if the
+        date is not a valid gregorian date, instead of returning the forged
+        nearest date.
+
+    Returns
+    -------
+    out : str
+        ISO formatted datetime.
+
+    Notes
+    -----
+    Does not support time zones.
+
+    """
+
+    if force_gregorian_date:
+        try:
+            real_datetime = datetime.datetime(*nc_datetime.timetuple()[0:6])
+        except ValueError:
+            if raise_non_gregorian_dates:
+                raise
+            # Forging a nearest gregorian date. Try day-1 and if this works
+            # and hour < 12, set to (year,month,day-1,23,59,59), else
+            # set to (year,month+1,1,0,0,0).
+            year = nc_datetime.year
+            next_month = nc_datetime.month + 1
+            if next_month == 13:
+                next_month = 1
+                year += 1
+            real_datetime = datetime.datetime(year, next_month, 1, 0, 0, 0)
+            if nc_datetime.hour < 12:
+                try:
+                    real_datetime = datetime.datetime(
+                        nc_datetime.year, nc_datetime.month,
+                        nc_datetime.day - 1)
+                    real_datetime = datetime.datetime(
+                        nc_datetime.year, nc_datetime.month,
+                        nc_datetime.day - 1, 23, 59, 59)
+                except ValueError:
+                    pass
+        return real_datetime.isoformat()
+    else:
+        return nc_datetime.strftime('%Y-%m-%dT%H:%M:%S')
