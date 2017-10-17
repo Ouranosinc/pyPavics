@@ -695,6 +695,7 @@ def aggregate_from_solr_search(solr_search_result):
         order_attr = doc['opendap_url']
         if len(order_attr) == 1:
             doc['type'] = 'FileAsAggregate'
+            doc['aggregate_title'] = doc['title'][0]
         for (attr, value) in doc.items():
             if hasattr(value, 'append') and (len(value) == len(order_attr)):
                 doc[attr] = [x for (_, x) in sorted(zip(order_attr, value))]
