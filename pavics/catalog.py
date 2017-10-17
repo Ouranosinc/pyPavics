@@ -15,7 +15,6 @@ Functions:
 import os
 import copy
 import json
-import calendar
 import requests
 import logging
 
@@ -235,6 +234,13 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 
     """
 
+    # Add or remove dataset_id from facets list depending on parameters.
+    index_facets_did = copy.deepcopy(index_facets)
+    if overwrite_dataset_id and ('dataset_id' in index_facets):
+        index_facets_did.remove('dataset_id')
+    elif (not overwrite_dataset_id) and ('dataset_id' not in index_facets):
+        index_facets_did.append('dataset_id')
+
     if ignored_variables is None:
         ignored_variables = netcdf_ignored_variables
 
@@ -291,20 +297,13 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 
         # Set default dataset_id
         if set_dataset_id:
-            ci = urls['catalog_url'].find('/catalog.xml')
-            did = '.'.join(urls['catalog_url'][:ci].split('/')[6:])
-            doc['dataset_id'] = did
-            if overwrite_dataset_id and ('dataset_id' in index_facets):
-                index_facets.remove('dataset_id')
-            elif (not overwrite_dataset_id) and \
-                 ('dataset_id' not in index_facets):
-                index_facets.append('dataset_id')
+            doc['dataset_id'] = '.'.join(doc['resourcename'].split('/')[1:-1])
 
         # Add custom facets
         # In the ESGF implementation, all facets are stored in multivalued
         # fields, not sure how this is ever used... Not following this
         # convention here...
-        for facet in index_facets:
+        for facet in index_facets_did:
             if hasattr(nc, facet):
                 doc[facet] = getattr(nc, facet)
             elif hasattr(nc, facet + '_id'):
