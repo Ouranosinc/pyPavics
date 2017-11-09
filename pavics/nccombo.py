@@ -164,6 +164,18 @@ def get_point(nc_resource, var_names, ordered_indices=None, named_indices=None,
         f = pavnc._get_point_from_ncvar_and_named_indices
         d[ncvar.name] = f(ncvar, named_indices)
         d[ncvar.name]['_indices'] = named_indices
+        # workaround to also provided irregular grids indices with lon/lat keys
+        if 'lon' not in d[ncvar.name]['_indices']:
+            if 'xc' in d[ncvar.name]['_indices']:
+                d[ncvar.name]['_indices']['lat'] = \
+                    d[ncvar.name]['_indices']['yc']
+                d[ncvar.name]['_indices']['lon'] = \
+                    d[ncvar.name]['_indices']['xc']
+            elif 'rlon' in d[ncvar.name]['_indices']:
+                d[ncvar.name]['_indices']['lat'] = \
+                    d[ncvar.name]['_indices']['rlat']
+                d[ncvar.name]['_indices']['lon'] = \
+                    d[ncvar.name]['_indices']['rlon']
         d['_dimensions'] = {}
         for dim in ncvar.dimensions:
             if dim in d['_dimensions']:
