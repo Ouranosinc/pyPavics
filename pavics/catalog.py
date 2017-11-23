@@ -17,11 +17,13 @@ import copy
 import json
 import requests
 import logging
+import urlparse
 
 import threddsclient
 import netCDF4
 
 from . import nctime
+from . import netcdfcookie
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +193,7 @@ def solr_update(solr_server, update_data):
 def thredds_crawler(thredds_server, index_facets, depth=50,
                     ignored_variables=None, set_dataset_id=False,
                     overwrite_dataset_id=False,
-                    wms_alternate_server=None, target_files=None):
+                    wms_alternate_server=None, target_files=None, headers=None):
     """Crawl thredds server for metadata.
 
     Parameters
@@ -221,6 +223,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         in different folders of the thredds catalog, they are both picked up
         by the crawler). If this is provided, all target files must be
         found.
+    headers : headers adds to the thredds client requests
 
     Returns
     -------
@@ -252,101 +255,103 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
             target_file_names.append(os.path.basename(target_file))
 
     targets_found = []
-    for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth):
-        if target_files:
-            thredds_file_name = os.path.basename(thredds_dataset.ID)
-            if thredds_file_name not in target_file_names:
+    opendap_hostname = urlparse.urlparse(thredds_server).hostname
+    with netcdfcookie.NetCDFCookie(headers, [opendap_hostname, ]):
+        for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth, headers=headers):
+            if target_files:
+                thredds_file_name = os.path.basename(thredds_dataset.ID)
+                if thredds_file_name not in target_file_names:
+                    continue
+                targets_found.append(thredds_file_name)
+
+            wms_url = _modify_wms_url(thredds_dataset, wms_alternate_server)
+            urls = {'opendap_url': thredds_dataset.opendap_url(),
+                    'download_url': thredds_dataset.download_url(),
+                    'thredds_server': thredds_server,
+                    'catalog_url': thredds_dataset.catalog.url,
+                    'wms_url': wms_url}
+
+            # Here, if opening the NetCDF file fails, we simply continue
+            # to the next one. Perhaps a way to track the erroneous files
+            # should be considered...
+            try:
+                nc = netCDF4.Dataset(urls['opendap_url'], 'r')
+                (datetime_min, datetime_max) = nctime.time_start_end(nc)
+            except:
+                # Should have a logging mechanism
                 continue
-            targets_found.append(thredds_file_name)
 
-        wms_url = _modify_wms_url(thredds_dataset, wms_alternate_server)
-        urls = {'opendap_url': thredds_dataset.opendap_url(),
-                'download_url': thredds_dataset.download_url(),
-                'thredds_server': thredds_server,
-                'catalog_url': thredds_dataset.catalog.url,
-                'wms_url': wms_url}
+            # Default Birdhouse catalog entry
+            # 'url' is used differently in the ESGF database, adding
+            # 'fileserver_url' and will possibly use 'url' as in the ESGF
+            # implementation
+            doc = {'url': urls['download_url'],
+                   'fileserver_url': urls['download_url'],
+                   'source': os.path.join(urls['thredds_server'], 'catalog.xml'),
+                   'catalog_url': "{0}?dataset={1}".format(
+                       urls['catalog_url'], thredds_dataset.ID),
+                   'category': 'thredds',
+                   'content_type': thredds_dataset.content_type,
+                   'opendap_url': urls['opendap_url'],
+                   'title': thredds_dataset.name,
+                   'last_modified': thredds_dataset.modified,
+                   'wms_url': urls['wms_url'],
+                   'resourcename': thredds_dataset.url_path,
+                   'subject': 'Birdhouse Thredds Catalog',
+                   'type': 'File'}
 
-        # Here, if opening the NetCDF file fails, we simply continue
-        # to the next one. Perhaps a way to track the erroneous files
-        # should be considered...
-        try:
-            nc = netCDF4.Dataset(urls['opendap_url'], 'r')
-            (datetime_min, datetime_max) = nctime.time_start_end(nc)
-        except:
-            # Should have a logging mechanism
-            continue
+            # Set default dataset_id
+            if set_dataset_id:
+                doc['dataset_id'] = '.'.join(doc['resourcename'].split('/')[1:-1])
 
-        # Default Birdhouse catalog entry
-        # 'url' is used differently in the ESGF database, adding
-        # 'fileserver_url' and will possibly use 'url' as in the ESGF
-        # implementation
-        doc = {'url': urls['download_url'],
-               'fileserver_url': urls['download_url'],
-               'source': os.path.join(urls['thredds_server'], 'catalog.xml'),
-               'catalog_url': "{0}?dataset={1}".format(
-                   urls['catalog_url'], thredds_dataset.ID),
-               'category': 'thredds',
-               'content_type': thredds_dataset.content_type,
-               'opendap_url': urls['opendap_url'],
-               'title': thredds_dataset.name,
-               'last_modified': thredds_dataset.modified,
-               'wms_url': urls['wms_url'],
-               'resourcename': thredds_dataset.url_path,
-               'subject': 'Birdhouse Thredds Catalog',
-               'type': 'File'}
+            # Add custom facets
+            # In the ESGF implementation, all facets are stored in multivalued
+            # fields, not sure how this is ever used... Not following this
+            # convention here...
+            for facet in index_facets_did:
+                if hasattr(nc, facet):
+                    doc[facet] = getattr(nc, facet)
+                elif hasattr(nc, facet + '_id'):
+                    doc[facet] = getattr(nc, facet + '_id')
 
-        # Set default dataset_id
-        if set_dataset_id:
-            doc['dataset_id'] = '.'.join(doc['resourcename'].split('/')[1:-1])
+            # Replica and latest
+            # Setting defaults here, to be modified by other operations.
+            doc['replica'] = False
+            doc['latest'] = True
 
-        # Add custom facets
-        # In the ESGF implementation, all facets are stored in multivalued
-        # fields, not sure how this is ever used... Not following this
-        # convention here...
-        for facet in index_facets_did:
-            if hasattr(nc, facet):
-                doc[facet] = getattr(nc, facet)
-            elif hasattr(nc, facet + '_id'):
-                doc[facet] = getattr(nc, facet + '_id')
+            # Datetime min/max
+            if datetime_min:
+                # Time zones are not supported by that function...
+                # Plus solr only supports UTC:
+                # https://lucene.apache.org/solr/guide/6_6/working-with-dates.html
+                doc['datetime_min'] = nctime.nc_datetime_to_iso(
+                    datetime_min, force_gregorian_date=True) + 'Z'
+            if datetime_max:
+                doc['datetime_max'] = nctime.nc_datetime_to_iso(
+                    datetime_max, force_gregorian_date=True) + 'Z'
 
-        # Replica and latest
-        # Setting defaults here, to be modified by other operations.
-        doc['replica'] = False
-        doc['latest'] = True
-
-        # Datetime min/max
-        if datetime_min:
-            # Time zones are not supported by that function...
-            # Plus solr only supports UTC:
-            # https://lucene.apache.org/solr/guide/6_6/working-with-dates.html
-            doc['datetime_min'] = nctime.nc_datetime_to_iso(
-                datetime_min, force_gregorian_date=True) + 'Z'
-        if datetime_max:
-            doc['datetime_max'] = nctime.nc_datetime_to_iso(
-                datetime_max, force_gregorian_date=True) + 'Z'
-
-        if ignored_variables != 'all':
-            for var_name in nc.variables:
-                if var_name in ignored_variables:
-                    continue
-                ncvar = nc.variables[var_name]
-                ccf = hasattr(ncvar, 'standard_name')
-                clong = hasattr(ncvar, 'long_name')
-                cunits = hasattr(ncvar, 'units')
-                # if there is no standard name, long_name or units, ignore it
-                if not (ccf or clong or cunits):
-                    continue
-                if 'variable' not in doc:
-                    doc['variable'] = [var_name]
-                else:
-                    doc['variable'].append(var_name)
-                for (bh_attr, attr) in birdhouse_solr_attr_mapping.items():
-                    if bh_attr not in doc:
-                        doc[bh_attr] = []
-                    doc[bh_attr].append(
-                        getattr(ncvar, attr, '_undefined'))
-        nc.close()
-        add_data.append(doc)
+            if ignored_variables != 'all':
+                for var_name in nc.variables:
+                    if var_name in ignored_variables:
+                        continue
+                    ncvar = nc.variables[var_name]
+                    ccf = hasattr(ncvar, 'standard_name')
+                    clong = hasattr(ncvar, 'long_name')
+                    cunits = hasattr(ncvar, 'units')
+                    # if there is no standard name, long_name or units, ignore it
+                    if not (ccf or clong or cunits):
+                        continue
+                    if 'variable' not in doc:
+                        doc['variable'] = [var_name]
+                    else:
+                        doc['variable'].append(var_name)
+                    for (bh_attr, attr) in birdhouse_solr_attr_mapping.items():
+                        if bh_attr not in doc:
+                            doc[bh_attr] = []
+                        doc[bh_attr].append(
+                            getattr(ncvar, attr, '_undefined'))
+            nc.close()
+            add_data.append(doc)
 
     # Check that all target files were found
     if target_files:
@@ -361,7 +366,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                 ignored_variables=None, set_dataset_id=False,
                 overwrite_dataset_id=False, wms_alternate_server=None,
-                target_files=None, check_replica=True, split_update=100):
+                target_files=None, check_replica=True, split_update=100, headers=None):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -396,6 +401,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         another thredds server.
     split_update : int
         how many datasets will be updated per solr request.
+    headers : dict
+        headers adds to the thredds client requests
 
     Returns
     -------
@@ -418,7 +425,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                                set_dataset_id=set_dataset_id,
                                overwrite_dataset_id=overwrite_dataset_id,
                                wms_alternate_server=wms_alternate_server,
-                               target_files=target_files)
+                               target_files=target_files,
+                               headers=headers)
 
     solr_response = {'responseHeader':
                      {'QTime': 0, 'status': 0, 'Nquery': 0}}
