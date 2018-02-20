@@ -36,7 +36,8 @@ netcdf_ignored_variables = [
     'time', 'time_bnds', 'time_bounds', 'time_vectors', 'lat', 'lon', 'yc',
     'xc', 'rlat', 'rlon', 'lat_bnds', 'lat_bounds', 'lon_bnds', 'lon_bounds',
     'yc_bnds', 'xc_bnds', 'yc_bounds', 'xc_bounds', 'rlat_bnds', 'rlat_bounds',
-    'rlon_bnds', 'rlon_bounds', 'level', 'level_bnds', 'level_bounds', 'plev']
+    'rlon_bnds', 'rlon_bounds', 'level', 'level_bnds', 'level_bounds', 'plev',
+    'longitude', 'latitude', 'height']
 
 variables_default_min_max = {
     'pr': (0, 0.0001, 'seq-Blues'),
@@ -188,10 +189,42 @@ def solr_update(solr_server, update_data):
     return update_result
 
 
+def solr_delete(solr_server, delete_ids):
+    """Delete data in a Solr database.
+
+    Parameters
+    ----------
+    solr_server : string
+        usually of the form 'http://x.x.x.x:8983/solr/core_name/'
+    delete_ids : list of ids to delete
+
+    Returns
+    -------
+    out : string
+        json response from the Solr server
+
+    """
+
+    # make sure delete_data is a list
+    if not hasattr(delete_ids, 'append'):
+        delete_ids = [delete_ids]
+
+    # delete data in solr
+    solr_call = os.path.join(solr_server, 'update?commit=true')
+    solr_json_input = json.dumps({'delete':delete_ids})
+    headers = {'Content-type': 'application/json'}
+    r = requests.post(solr_call, data=solr_json_input, headers=headers)
+    if not r.ok:
+        r.raise_for_status()
+    delete_result = r.json()
+    return delete_result
+
+
 def thredds_crawler(thredds_server, index_facets, depth=50,
                     ignored_variables=None, set_dataset_id=False,
                     overwrite_dataset_id=False,
-                    wms_alternate_server=None, target_files=None):
+                    wms_alternate_server=None, target_files=None,
+                    ignored_files=None):
     """Crawl thredds server for metadata.
 
     Parameters
@@ -216,11 +249,12 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         the NetCDF file.
     wms_alternate_server : string
     target_files : list of string
-        only those file names will be crawled, can be urls or full paths,
-        but only the file name will be used (if two files have the same name
-        in different folders of the thredds catalog, they are both picked up
-        by the crawler). If this is provided, all target files must be
-        found.
+        only those paths will be crawled, paths are relative to thredds root
+        directory. If this is provided, all target paths must be found.
+        Additionally, this implementation also works in reverse, such that
+        a given location suffix (e.g. a filename) will also be crawler.
+    ignored_files : list of string
+        same rules as target_files but those paths will be ignored.
 
     Returns
     -------
@@ -245,19 +279,31 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
         ignored_variables = netcdf_ignored_variables
 
     add_data = []
-    # Get only filenames of target_files
-    target_file_names = []
-    if target_files:
-        for target_file in target_files:
-            target_file_names.append(os.path.basename(target_file))
-
     targets_found = []
     for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth):
-        if target_files:
-            thredds_file_name = os.path.basename(thredds_dataset.ID)
-            if thredds_file_name not in target_file_names:
+        if ignored_files:
+            ignore_this_file = False
+            for ignored_path in ignored_files:
+                if thredds_dataset.url_path[:len(ignored_path)] == \
+                   ignored_path:
+                    ignore_this_file = True
+                    break
+                elif thredds_dataset.url_path[-len(ignored_path):] == \
+                     ignored_path:
+                    ignore_this_file = True
+                    break
+            if ignore_this_file:
                 continue
-            targets_found.append(thredds_file_name)
+        if target_files:
+            for target_path in target_files:
+                if thredds_dataset.url_path[:len(target_path)] == target_path:
+                    break
+                elif thredds_dataset.url_path[-len(target_path):] == \
+                     target_path:
+                    break
+            else:
+                continue
+            targets_found.append(target_path)
 
         wms_url = _modify_wms_url(thredds_dataset, wms_alternate_server)
         urls = {'opendap_url': thredds_dataset.opendap_url(),
@@ -350,10 +396,10 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 
     # Check that all target files were found
     if target_files:
-        if set(target_file_names) != set(targets_found):
-            missing_files = set(target_file_names) - set(targets_found)
+        if set(target_files) != set(targets_found):
+            missing_files = set(target_files) - set(targets_found)
             raise MissingThreddsFile(
-                "One or more target file not found: {0}".format(
+                "One or more target path not found: {0}".format(
                     str(list(missing_files))))
     return add_data
 
