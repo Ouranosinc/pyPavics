@@ -407,7 +407,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                 ignored_variables=None, set_dataset_id=False,
                 overwrite_dataset_id=False, wms_alternate_server=None,
-                target_files=None, check_replica=True, split_update=100):
+                target_files=None, ignored_files=None, check_replica=True,
+                split_update=100):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -436,6 +437,14 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
     target_files : list of string
         only those file names will be crawled. If this is provided, all target
         files must be found or nothing will be added to solr.
+    target_files : list of string
+        only those paths will be crawled, paths are relative to thredds root
+        directory. If this is provided, all target paths must be found or
+        nothing will be added to solr. Additionally, this implementation also
+        works in reverse, such that a given location suffix (e.g. a filename)
+        will also be crawler.
+    ignored_files : list of string
+        same rules as target_files but those paths will be ignored.
     check_replica : bool
         if True, will search for identical file names and dataset_id in solr
         and tag this instance as replica=True if it already exists on
@@ -464,7 +473,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                                set_dataset_id=set_dataset_id,
                                overwrite_dataset_id=overwrite_dataset_id,
                                wms_alternate_server=wms_alternate_server,
-                               target_files=target_files)
+                               target_files=target_files,
+                               ignored_files=ignored_files)
 
     solr_response = {'responseHeader':
                      {'QTime': 0, 'status': 0, 'Nquery': 0}}
