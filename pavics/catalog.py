@@ -93,6 +93,7 @@ def aggregate_solr_responses(solr_response1, solr_response2):
 
 def _split_solr_update(solr_server, add_data, split_update=None):
     if split_update:
+        previous_update = None
         for i in range(0, len(add_data), split_update):
             update_result = solr_update(
                 solr_server, add_data[i:i + split_update])
@@ -226,7 +227,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     ignored_variables=None, set_dataset_id=False,
                     overwrite_dataset_id=False,
                     wms_alternate_server=None, target_files=None,
-                    ignored_files=None, headers=None):
+                    ignored_files=None, headers=None, verify=True):
     """Crawl thredds server for metadata.
 
     Parameters
@@ -258,6 +259,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
     ignored_files : list of string
         same rules as target_files but those paths will be ignored.
     headers : headers adds to the thredds client requests
+    verify : SSL verification
 
     Returns
     -------
@@ -285,28 +287,29 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
     targets_found = []
 
     opendap_hostname = urlparse.urlparse(thredds_server).hostname
-    with netcdfcookie.NetCDFCookie(headers, [opendap_hostname, ]):
-        for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth, headers=headers):
-
+    with netcdfcookie.NetCDFCookie(headers, [opendap_hostname, ],
+                                   verify=verify):
+        for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth,
+                                                   headers=headers,
+                                                   verify=verify):
             if ignored_files:
                 ignore_this_file = False
                 for ignored_path in ignored_files:
-                    if thredds_dataset.url_path[:len(ignored_path)] == \
-                       ignored_path:
+                    ipl = len(ignored_path)
+                    if thredds_dataset.url_path[:ipl] == ignored_path:
                         ignore_this_file = True
                         break
-                    elif thredds_dataset.url_path[-len(ignored_path):] == \
-                         ignored_path:
+                    elif thredds_dataset.url_path[-ipl:] == ignored_path:
                         ignore_this_file = True
                         break
                 if ignore_this_file:
                     continue
             if target_files:
                 for target_path in target_files:
-                    if thredds_dataset.url_path[:len(target_path)] == target_path:
+                    tpl = len(target_path)
+                    if thredds_dataset.url_path[:tpl] == target_path:
                         break
-                    elif thredds_dataset.url_path[-len(target_path):] == \
-                         target_path:
+                    elif thredds_dataset.url_path[-tpl:] == target_path:
                         break
                 else:
                     continue
@@ -335,7 +338,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
             # implementation
             doc = {'url': urls['download_url'],
                    'fileserver_url': urls['download_url'],
-                   'source': os.path.join(urls['thredds_server'], 'catalog.xml'),
+                   'source': os.path.join(urls['thredds_server'],
+                                          'catalog.xml'),
                    'catalog_url': "{0}?dataset={1}".format(
                        urls['catalog_url'], thredds_dataset.ID),
                    'category': 'thredds',
@@ -350,7 +354,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 
             # Set default dataset_id
             if set_dataset_id:
-                doc['dataset_id'] = '.'.join(doc['resourcename'].split('/')[1:-1])
+                doc['dataset_id'] = '.'.join(
+                    doc['resourcename'].split('/')[1:-1])
 
             # Add custom facets
             # In the ESGF implementation, all facets are stored in multivalued
@@ -386,7 +391,8 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     ccf = hasattr(ncvar, 'standard_name')
                     clong = hasattr(ncvar, 'long_name')
                     cunits = hasattr(ncvar, 'units')
-                    # if there is no standard name, long_name or units, ignore it
+                    # if there is no standard name, long_name or units,
+                    # ignore it
                     if not (ccf or clong or cunits):
                         continue
                     if 'variable' not in doc:
@@ -415,7 +421,7 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                 ignored_variables=None, set_dataset_id=False,
                 overwrite_dataset_id=False, wms_alternate_server=None,
                 target_files=None, ignored_files=None, check_replica=True,
-                split_update=100, headers=None):
+                split_update=100, headers=None, verify=True):
     """Crawl thredds server and output to Solr database.
 
     Parameters
@@ -460,6 +466,7 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         how many datasets will be updated per solr request.
     headers : dict
         headers adds to the thredds client requests
+    verify : SSL verification
 
     Returns
     -------
@@ -484,7 +491,7 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
                                wms_alternate_server=wms_alternate_server,
                                target_files=target_files,
                                ignored_files=ignored_files,
-                               headers=headers)
+                               headers=headers, verify=verify)
 
     solr_response = {'responseHeader':
                      {'QTime': 0, 'status': 0, 'Nquery': 0}}
