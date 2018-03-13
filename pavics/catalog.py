@@ -1,14 +1,11 @@
-"""
-=======
-Catalog
-=======
+"""Catalog for Solr indexing of NetCDF files on a THREDDS server.
 
-Functions:
+Notes
+-----
+A localhost Solr index can be launched with docker::
 
- * :func:`pavicrawler` - Crawl thredds server and output to Solr.
- * :func:`pavicsvalidate` - Validate Solr database for required facets.
- * :func:`pavicsupdate` - Update Solr database.
- * :func:`pavicsearch` - Search Solr database.
+    $ docker run --name my_solr -d -p 8983:8983 -t pavics/solr
+    http://localhost:8983/solr/birdhouse/
 
 """
 
