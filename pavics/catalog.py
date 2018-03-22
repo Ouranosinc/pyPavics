@@ -77,17 +77,6 @@ def _modify_wms_url(thredds_dataset, wms_alternate_server=None):
     return wms_url
 
 
-def aggregate_solr_responses(solr_response1, solr_response2):
-    solr_response_agg = copy.deepcopy(solr_response1)
-    qtime2 = solr_response2['responseHeader']['QTime']
-    solr_response_agg['responseHeader']['QTime'] += qtime2
-    if 'Nquery' in solr_response_agg['responseHeader']:
-        solr_response_agg['responseHeader']['Nquery'] += 1
-    else:
-        solr_response_agg['responseHeader']['Nquery'] = 2
-    return solr_response_agg
-
-
 def _split_solr_update(solr_server, add_data, split_update=None):
     if split_update:
         previous_update = None
@@ -359,10 +348,10 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
             # fields, not sure how this is ever used... Not following this
             # convention here...
             for facet in index_facets_did:
-                if hasattr(nc, facet):
-                    doc[facet] = getattr(nc, facet)
-                elif hasattr(nc, facet + '_id'):
+                if hasattr(nc, facet + '_id'):
                     doc[facet] = getattr(nc, facet + '_id')
+                elif hasattr(nc, facet):
+                    doc[facet] = getattr(nc, facet)
 
             # Replica and latest
             # Setting defaults here, to be modified by other operations.
@@ -759,10 +748,13 @@ def aggregate_from_solr_search(solr_search_result):
         if i not in first_instances:
             search_results['response']['docs'].pop(i)
 
-    # reorder based on opendap_url name
+    # reorder based on opendap_url name (or url if not possible)
     # also reduce lists with repeating values for all files
     for doc in search_results['response']['docs']:
-        order_attr = doc['opendap_url']
+        if 'opendap_url' in doc:
+            order_attr = doc['opendap_url']
+        else:
+            order_attr = doc['url']
         if len(order_attr) == 1:
             doc['type'] = 'FileAsAggregate'
             doc['aggregate_title'] = doc['title'][0]
@@ -832,83 +824,46 @@ def add_default_min_max_to_solr_search(solr_search_result):
     return search_results
 
 
-def pavicsearch(solr_server, facets=None, limit=10, offset=0,
-                search_type='Dataset', output_format='application/solr+json',
-                fields=None, constraints=None, query=None,
-                add_default_min_max=True):
-    """Search Solr database.
+def restructure_urls(solr_search_result):
+    """Split urls in multiple fields
 
     Parameters
     ----------
-    solr_server : string
-        usually of the form 'http://x.x.x.x:8983/solr/core_name/'
-    facets : string
-        comma separated list of facets; facets are searchable indexing
-        terms in the Solr database
-    limit : int
-        maximum number of documents to return
-    offset : int
-        where to start in the document count of the Solr search
-    search_type : string
-        one of 'Dataset', 'File', 'Aggregate' or 'FileAsAggregate'
-    output_format : string
-        one of 'application/solr+json' or 'application:solr+xml'
-    fields : string
-        comma separated list of fields to return
-    constraints : string
-        comma separated list of facets and their search value separated
-        by colon (e.g. model:CRCM4,experiment:rcp85)
-    query : string
-        direct query to the Solr database
-    add_default_min_max : bool
-        whether to add default color palette information to search result
+    solr_search_result : string
+        the json structure result from a Solr query
 
     Returns
     -------
     out : string
-        json response from the Solr server
+        json response with added url fields
 
     """
 
-    my_search = ""
-    my_query = "&q="
-    if facets:
-        my_search += "&facet=true"
-        if facets != '*':
-            facets = facets.split(',')
-        else:
-            facets = default_facets
-        for facet in facets:
-            my_search += "&facet.field=%s" % (facet,)
-    my_search += "&rows=%s" % (limit,)
-    my_search += "&start=%s" % (offset,)
-    if output_format == 'application/solr+json':
-        my_search += "&wt=json"
-    else:
-        # No longer supporting application:solr+xml (&wt=xml)
-        raise NotImplementedError()
-    if fields is not None:
-        my_search += "&fl={0}".format(fields)
-    if constraints is not None:
-        constraints = constraints.split(',')
-        for constraint in constraints:
-            keyval = constraint.split(':')
-            # According to the ESGF API, if a key appears more than
-            # once, it is an OR statement, this should be added
-            # eventually. Similarly, there is support for not equal
-            # != ...
-            my_query += '+{0}:{1}'.format(keyval[0], keyval[1])
-    if query is not None:
-        my_query += '+{0}'.format(query)
-    my_search += "&indent=true"
-    if my_query != '&q=':
-        my_search += my_query
-    my_search = my_search.lstrip('&')
-    solr_call = os.path.join(solr_server, 'select?{0}'.format(my_search))
-    r = requests.get(solr_call)
-    if not r.ok:
-        r.raise_for_status()
-    search_result = r.json()
+    search_results = copy.deepcopy(solr_search_result)
+    for doc in search_results['response']['docs']:
+        for url in doc['url']:
+            decode_url = url.split('|')
+            url_type = decode_url[-1]
+            if url_type == 'HTTPServer':
+                http_link = decode_url[0]
+                doc[u'fileserver_url'] = decode_url[0]
+            elif url_type == 'OPENDAP':
+                doc[u'opendap_url'] = decode_url[0]
+            elif url_type == 'GridFTP':
+                doc[u'gridftp_url'] = decode_url[0]
+            elif url_type == 'Globus':
+                doc[u'globus_url'] = decode_url[0]
+            elif url_type == 'WMS':
+                doc[u'wms_url'] = decode_url[0]
+            else:
+                raise ValueError("Unknown URL type: {0}".format(url_type))
+        doc[u'url'] = http_link
+        doc[u'source'] = 'ESGF'
+    return search_results
+
+
+def restructure_type(search_result, add_default_min_max=True,
+                     search_type='File'):
     if add_default_min_max:
         search_result = add_default_min_max_to_solr_search(search_result)
     if search_type == 'Dataset':
@@ -918,6 +873,312 @@ def pavicsearch(solr_server, facets=None, limit=10, offset=0,
     elif search_type == 'FileAsAggregate':
         search_result = file_as_aggregate_from_solr_search(search_result)
     return search_result
+
+
+def pavicsearch(solr_server, facets=None, offset=0, limit=10, fields=None,
+                query=None, constraints=None, search_type='File',
+                output_format='application/solr+json',
+                add_default_min_max=True, **kwargs):
+    """Search Solr database.
+
+    Parameters
+    ----------
+    solr_server : string
+        usually of the form 'http://x.x.x.x:8983/solr/core_name/'
+    facets : string
+        comma separated list of facets; facets are searchable indexing
+        terms in the Solr database
+    offset : int
+        where to start in the document count of the Solr search
+    limit : int
+        maximum number of documents to return
+    fields : string
+        comma separated list of fields to return
+    query : string
+        direct query to the Solr database
+    constraints : string
+        comma separated list of facets and their search value separated
+        by colon (e.g. model:CRCM4,experiment:rcp85)
+    search_type : string
+        one of 'Dataset', 'File', 'Aggregate' or 'FileAsAggregate'
+    output_format : string
+        one of 'application/solr+json' or 'application:solr+xml'
+    add_default_min_max : bool
+        whether to add default color palette information to search result
+
+    Returns
+    -------
+    (out1, out2) : strings
+        out1 - json response from the Solr server
+        out2 - url used for the Solr request
+
+    """
+
+    solr_url = os.path.join(solr_server, 'select?')
+    solr_search = ''
+    if facets:
+        solr_search += ("&facet=true"
+                        "&facet.limit=-1"
+                        "&facet.method=enum"
+                        "&facet.mincount=1"
+                        "&facet.sort=lex")
+        if facets == '*':
+            facets = default_facets
+        else:
+            facets = facets.split(',')
+        for facet in facets:
+            solr_search += "&facet.field={0}".format(facet)
+    solr_search += "&start={0}".format(offset)
+    solr_search += "&rows={0}".format(limit)
+    if query is None:
+        solr_search += "&q=*:*"
+    else:
+        solr_search += "&q={0}".format(query)
+    if constraints:
+        keys = []
+        vals = []
+        constraints = constraints.split(',')
+        for constraint in constraints:
+            keyval = constraint.split(':')
+            # The constraint key has to be in the Solr index schema, here
+            # the values in default_facets are used as a validation.
+            if keyval[0][-1] == '!':
+                if keyval[0][:-1] not in default_facets:
+                    continue
+                keys.append('-{0}'.format(keyval[0][:-1]))
+            else:
+                if keyval[0] not in default_facets:
+                    continue
+                keys.append(keyval[0])
+            vals.append(keyval[1])
+        for i, key in enumerate(keys):
+            if ((keys.count(key) > 1) and (keys.index(key) != i) and
+                    (key[0] != '-')):
+                continue
+            fq_str = '&fq={0}:"{1}"'.format(key, vals[i])
+            if key[0] != '-':
+                for j, other_key in enumerate(keys[i + 1:]):
+                    if other_key == key:
+                        fq_str += ' || {0}:"{1}"'.format(key, vals[i + j + 1])
+            solr_search += fq_str
+    if fields:
+        solr_search += "&fl={0},score".format(fields)
+    else:
+        solr_search += "&fl=*,score".format(fields)
+    # For now, all items in the PAVICS solr index are files.
+    solr_search += "&fq=type:File"
+    solr_search += "&sort=id+asc"
+    solr_search += "&wt=json"
+    solr_search += "&indent=true"
+    solr_search_url = solr_url + solr_search.lstrip('&')
+    r = requests.get(solr_search_url)
+    if not r.ok:
+        r.raise_for_status()
+    solr_result = r.json()
+    solr_result = restructure_type(solr_result, add_default_min_max,
+                                   search_type)
+    return (solr_result, solr_search_url)
+
+
+def esgf_search(esgf_server, facets=None, offset=0, limit=10, fields=None,
+                query=None, constraints=None, search_type='Dataset',
+                distrib=True, **kwargs):
+    """Search ESGF server.
+
+    Parameters
+    ----------
+    esgf_server : string
+        e.g. https://esgf-node.llnl.gov/esg-search
+    facets : string
+        comma separated list of facets; facets are searchable indexing
+        terms in the Solr database
+    offset : int
+        where to start in the document count of the Solr search
+    limit : int
+        maximum number of documents to return
+    fields : string
+        comma separated list of fields to return
+    query : string
+        direct query to the Solr database
+    constraints : string
+        comma separated list of facets and their search value separated
+        by colon (e.g. model:CRCM4,experiment:rcp85)
+    search_type : string
+        one of 'Dataset', 'File', 'Aggregate'
+    distrib : bool
+        distributed search
+    add_default_min_max : bool
+        whether to add default color palette information to search result
+
+    Returns
+    -------
+    (out1, out2) : strings
+        out1 - json response from the ESGF server
+        out2 - url used for the ESGF request
+
+    """
+
+    esgf_url = os.path.join(esgf_server, 'search?')
+    esgf_search = ''
+    # facets (default to not provided)
+    if facets:
+        esgf_search += '&facets={0}'.format(facets)
+    # shards (default to all available)
+    # offset
+    esgf_search += '&offset={0}'.format(str(offset))
+    # limit (Solr: rows=0)
+    esgf_search += '&limit={0}'.format(str(limit))
+    # fields (default fl=*%2Cscore)
+    if fields:
+        esgf_search += '&fields={0}'.format(fields)
+    # format (force json output, Solr: wt=json)
+    esgf_search += '&format=application%2Fsolr%2Bjson'
+    # query (default *:*)
+    if query:
+        esgf_search += '&query={0}'.format(query)
+    # Facet Queries
+    if constraints:
+        constraints = constraints.split(',')
+        for constraint in constraints:
+            keyval = constraint.split(':')
+            esgf_search += '&{0}={1}'.format(keyval[0], keyval[1])
+    # distrib (default true)
+    if distrib is False:
+        esgf_search += '&distrib=false'
+    # id
+    # master_id
+    # instance_id
+    # title
+    # description
+    # type (default Dataset, Solr: fq=type:Dataset)
+    if search_type:
+        esgf_search += '&type={0}'.format(search_type)
+    # replica
+    # latest
+    # data_node
+    # index_node
+    # version
+    # timestamp
+    # url
+    # access
+    # xlink
+    # size
+    # checksum
+    # checksum_type
+    # number_of_files
+    # number_of_aggregations
+    # dataset_id
+    # tracking_id
+    # drs_id
+    # start
+    # end
+    # bbox
+    # from
+    # to
+    esgf_search_url = esgf_url + esgf_search.lstrip('&')
+    r = requests.get(esgf_search_url)
+    if not r.ok:
+        r.raise_for_status()
+    return (r.json(), esgf_search_url)
+
+
+def aggregate_solr_responses(solr_r1, solr_r2):
+    solr_agg = copy.deepcopy(solr_r1)
+    # responseHeader
+    rheader1 = solr_agg['responseHeader']
+    rheader2 = solr_r2['responseHeader']
+    if 'Nquery' in rheader1:
+        rheader1['Nquery'] += 1
+    else:
+        rheader1['Nquery'] = 2
+    rheader1['QTime'] += rheader2['QTime']
+    # responseHeader/params
+    # here we would like some uniformity across the responses, otherwise
+    # we might be mixing apples and oranges.
+    # response
+    response1 = solr_agg['response']
+    response2 = solr_r2['response']
+    response1['numFound'] += response2['numFound']
+    response1['docs'].extend(response2['docs'])
+    # facet_counts
+    if 'facet_counts' in solr_agg:
+        facet_counts1 = solr_agg['facet_counts']
+        facet_counts2 = solr_r2['facet_counts']
+        # facet_counts/facet_fields
+        facet_fields1 = facet_counts1['facet_fields']
+        facet_fields2 = facet_counts2['facet_fields']
+        for key, val in facet_fields2.items():
+            if key in facet_fields1:
+                # assume the value, count pair are always there, is that really
+                # the case?
+                for i, item in enumerate(val[::2]):
+                    if item in facet_fields1[key]:
+                        facet_fields1[key][2 * i + 1] += val[2 * i + 1]
+                    else:
+                        facet_fields1[key].extend([item, val[2 * i + 1]])
+            else:
+                facet_fields1[key] = val
+    return solr_agg
+
+
+def pavics_and_esgf_search(solr_servers, esgf_servers,
+                           add_default_min_max=True, **kwargs):
+    """Combine PAVICS search with ESGF search
+
+    Parameters
+    ----------
+    solr_servers : list of strings
+        e.g. http://x.x.x.x:8983/solr/core_name/
+    esgf_servers : list of strings
+        e.g. https://esgf-node.llnl.gov/esg-search
+    add_default_min_max : bool
+        whether to add default color palette information to search result
+
+    Returns
+    -------
+    (out1, out2) : strings
+        out1 - json response from the ESGF server
+        out2 - url used for the ESGF request
+
+    Notes
+    -----
+    When providing multiple esgf_servers, should use distrib=False since
+    their index should be synchronized.
+
+    """
+
+    combined_solr = None
+    for solr_server in solr_servers:
+        if combined_solr is None:
+            (combined_solr, search_url) = pavicsearch(
+                solr_server, add_default_min_max=add_default_min_max, **kwargs)
+        else:
+            (solr_result, search_url) = pavicsearch(
+                solr_server, add_default_min_max=add_default_min_max, **kwargs)
+            combined_solr = aggregate_solr_responses(combined_solr,
+                                                     solr_result)
+    # Forcing search_type to File and reconstructing search type. Should check
+    # whether Dataset and Aggregate actually work...
+    if 'search_type' in kwargs:
+        search_type = kwargs['search_type']
+        kwargs['search_type'] = 'File'
+    else:
+        kwargs['search_type'] = 'File'
+        search_type = 'File'
+    for esgf_server in esgf_servers:
+        if combined_solr is None:
+            (combined_solr, search_url) = esgf_search(esgf_server, **kwargs)
+            combined_solr = restructure_urls(combined_solr)
+            combined_solr = restructure_type(
+                combined_solr, add_default_min_max, search_type)
+        else:
+            (solr_result, search_url) = esgf_search(esgf_server, **kwargs)
+            solr_result = restructure_urls(solr_result)
+            solr_result = restructure_type(
+                solr_result, add_default_min_max, search_type)
+            combined_solr = aggregate_solr_responses(combined_solr,
+                                                     solr_result)
+    return combined_solr
 
 
 def list_of_files_from_pavicsearch(search_result):
