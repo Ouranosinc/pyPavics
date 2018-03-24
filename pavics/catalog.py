@@ -200,7 +200,7 @@ def solr_delete(solr_server, delete_ids):
 
     # delete data in solr
     solr_call = os.path.join(solr_server, 'update?commit=true')
-    solr_json_input = json.dumps({'delete':delete_ids})
+    solr_json_input = json.dumps({'delete': delete_ids})
     headers = {'Content-type': 'application/json'}
     r = requests.post(solr_call, data=solr_json_input, headers=headers)
     if not r.ok:
@@ -1181,7 +1181,7 @@ def pavics_and_esgf_search(solr_servers, esgf_servers,
     return combined_solr
 
 
-def list_of_files_from_pavicsearch(search_result):
+def list_of_files_from_pavicsearch(search_result, output_type='opendap_url'):
     """List of file from a pavicsearch result.
 
     Parameters
@@ -1198,8 +1198,10 @@ def list_of_files_from_pavicsearch(search_result):
 
     list_of_files = []
     for doc in search_result['response']['docs']:
-        if hasattr(doc['opendap_url'], 'append'):
-            list_of_files.extend(doc['opendap_url'])
+        if output_type not in doc:
+            continue
+        if hasattr(doc[output_type], 'append'):
+            list_of_files.extend(doc[output_type])
         else:
-            list_of_files.append(doc['opendap_url'])
+            list_of_files.append(doc[output_type])
     return list_of_files
