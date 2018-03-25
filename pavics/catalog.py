@@ -307,7 +307,6 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                     'thredds_server': thredds_server,
                     'catalog_url': thredds_dataset.catalog.url,
                     'wms_url': wms_url}
-
             # Here, if opening the NetCDF file fails, we simply continue
             # to the next one. Perhaps a way to track the erroneous files
             # should be considered...
@@ -434,9 +433,6 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         the NetCDF file.
     wms_alternate_server : string
     target_files : list of string
-        only those file names will be crawled. If this is provided, all target
-        files must be found or nothing will be added to solr.
-    target_files : list of string
         only those paths will be crawled, paths are relative to thredds root
         directory. If this is provided, all target paths must be found or
         nothing will be added to solr. Additionally, this implementation also
@@ -486,8 +482,8 @@ def pavicrawler(thredds_server, solr_server, index_facets, depth=50,
         add_raw = []
         add_refresh = []
         for doc in add_data:
-            search_dict = pavicsearch(
-                solr_server, limit=1000, search_type='File',
+            (search_dict, search_url) = pavicsearch(
+                solr_server, limit=1000, search_type=None,
                 add_default_min_max=False, query="{0} AND {1}".format(
                     doc['title'], doc['dataset_id']))
             if search_dict['response']['docs']:
@@ -966,7 +962,8 @@ def pavicsearch(solr_server, facets=None, offset=0, limit=10, fields=None,
     else:
         solr_search += "&fl=*,score".format(fields)
     # For now, all items in the PAVICS solr index are files.
-    solr_search += "&fq=type:File"
+    if search_type:
+        solr_search += "&fq=type:File"
     solr_search += "&sort=id+asc"
     solr_search += "&wt=json"
     solr_search += "&indent=true"
@@ -1096,10 +1093,11 @@ def aggregate_solr_responses(solr_r1, solr_r2):
     # here we would like some uniformity across the responses, otherwise
     # we might be mixing apples and oranges.
     # response
-    response1 = solr_agg['response']
-    response2 = solr_r2['response']
-    response1['numFound'] += response2['numFound']
-    response1['docs'].extend(response2['docs'])
+    if 'response' in solr_agg:
+        response1 = solr_agg['response']
+        response2 = solr_r2['response']
+        response1['numFound'] += response2['numFound']
+        response1['docs'].extend(response2['docs'])
     # facet_counts
     if 'facet_counts' in solr_agg:
         facet_counts1 = solr_agg['facet_counts']
