@@ -348,9 +348,9 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
             # convention here...
             for facet in index_facets_did:
                 if hasattr(nc, facet + '_id'):
-                    doc[facet] = getattr(nc, facet + '_id')
+                    doc[facet] = getattr(nc, facet + '_id').strip()
                 elif hasattr(nc, facet):
-                    doc[facet] = getattr(nc, facet)
+                    doc[facet] = getattr(nc, facet).strip()
 
             # Replica and latest
             # Setting defaults here, to be modified by other operations.
@@ -388,7 +388,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
                         if bh_attr not in doc:
                             doc[bh_attr] = []
                         doc[bh_attr].append(
-                            getattr(ncvar, attr, '_undefined'))
+                            getattr(ncvar, attr, '_undefined').strip())
             nc.close()
             add_data.append(doc)
 
