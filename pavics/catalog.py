@@ -274,9 +274,10 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
 
     opendap_hostname = urlparse.urlparse(thredds_server).hostname
     with netcdfcookie.NetCDFCookie(headers, [opendap_hostname, ],
-                                   verify=verify):
+                                   verify=verify) as netc:
         for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth,
                                                    headers=headers,
+                                                   cookies=netc.cookie,
                                                    verify=verify):
             if ignored_files:
                 ignore_this_file = False

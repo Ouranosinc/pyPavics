@@ -37,6 +37,7 @@ class NetCDFCookie:
                             expiration=0,
                             name=key,
                             value=value))
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.cookie:
