@@ -18,6 +18,8 @@ with open('HISTORY.rst') as history_file:
 REQUIREMENTS = [
     # TODO: put package requirements here
 ]
+with open('requirements.txt','r') as requirements_file:
+    REQUIREMENTS.extend([line.strip() for line in requirements_file])
 
 TEST_REQUIREMENTS = [
     'nose',
