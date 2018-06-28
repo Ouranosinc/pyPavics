@@ -2,14 +2,19 @@
 ==========
 SliceTools
 ==========
+
 Classes:
+
  * SliceError - the exception raised on failure.
+
 Functions:
+
  * :func:`_size_in_memory` - Size of an array in memory
  * :func:`_num_divisions_for_memory_fit` - Numbers of divisions to fit in mem.
  * :func:`divide_slice` - Divide slice
  * :func:`divide_slices` - Divide slices
  * :func:`divide_slices_for_memory_fit` - Divide slices to fit in memory
+
 A multidimensional slice is a tuple of integer, 1d array (or any list of int?),
 slice and or Ellipsis.
 Slice synthax reminder: slice([start,] stop[, step])
@@ -45,6 +50,7 @@ def _num_divisions_for_memory_fit(data_size, data_type,
 
 def divide_slice(one_slice, divisions, length=None):
     """Divide slice.
+
     Parameters
     ----------
     one_slice - slice
@@ -52,9 +58,11 @@ def divide_slice(one_slice, divisions, length=None):
         number of slices that will be returned.
     length - int or None
         when one_slice.stop is None, the length must be provided.
+
     Returns
     -------
     out - list of slices
+
     Examples
     --------
     >>> divide_slice(slice(2,8,2),2)
@@ -94,6 +102,7 @@ def divide_slice(one_slice, divisions, length=None):
 
 def divide_slices(shape, divisions, slices=None, dimensions=None):
     """Divide slices.
+
     Parameters
     ----------
     shape - tuple of int
@@ -108,9 +117,11 @@ def divide_slices(shape, divisions, slices=None, dimensions=None):
         that particular dimension; alternatively, a dictionary of slices
         using the name of a the dimensions can be used.
     dimensions - list of str
+
     Returns
     -------
     out - list of tuple of slices
+
     Examples
     --------
     >>> divide_slices((365,360,179),{'lon':2},dimensions=['time','lon','lat'])
@@ -197,6 +208,7 @@ def divide_slices_for_memory_fit(shape, dtype, slices=None, dimensions=None,
                                  memory_size=2000000000,
                                  divide_dimension=None):
     """Divide slices to fit in memory.
+
     Parameters
     ----------
     shape - tuple of int
@@ -213,9 +225,11 @@ def divide_slices_for_memory_fit(shape, dtype, slices=None, dimensions=None,
         divided; if a list of numbers/strings is provided, they correspond to
         multiple candidate dimensions for splitting, with priority going
         to the first one provided.
+
     Returns
     -------
     out - list of tuple of slices
+
     Examples
     --------
     >>> divide_slices_for_memory_fit((365,360,179), np.float32,

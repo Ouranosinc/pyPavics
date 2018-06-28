@@ -4,9 +4,14 @@ Installation
 
 At the command line::
 
-    $ easy_install pavics
+    $ conda install --file requirements.txt
+    $ python setup.py install
 
-Or, if you have virtualenvwrapper installed::
+To test the installation, run::
 
-    $ mkvirtualenv pavics
-    $ pip install pavics
+   $ python setup.py test
+
+
+To build the documentation::
+
+  $ make docs

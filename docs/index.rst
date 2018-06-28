@@ -22,7 +22,7 @@ Package information
    contributing
    authors
    history
-
+   pavics
 
 Indices and tables
 ==================

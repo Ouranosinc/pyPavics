@@ -10,8 +10,8 @@ class GeogridError(Exception):
 def distance_lon_lat(longitudes, latitudes, longitude, latitude):
     """Distance in meters between lon/lat on Earth (sphere, 6371 km radius).
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     longitudes : numpy array
     latitudes : numpy array
     longitude : float
