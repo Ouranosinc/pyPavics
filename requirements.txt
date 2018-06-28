@@ -11,3 +11,4 @@ requests
 testfixtures==4.13.5
 future==0.16.0
 threddsclient
+shapely
