@@ -9,11 +9,12 @@ Power Analytics and Visualization for Climate Science
 import logging.config
 import argparse
 import os
+import sys
 
 # -- Project specific --------------------------------------------------------
-from .__meta__ import __version__ as __ver__
-
-THIS_DIR = os.path.dirname(__file__)
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, THIS_DIR)
+from __meta__ import __version__ as __ver__
 
 
 def main():
