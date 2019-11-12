@@ -28,7 +28,6 @@ import time
 import datetime
 import numpy as np
 import numpy.ma as ma
-from past.builtins import basestring
 import netCDF4
 
 
@@ -147,10 +146,10 @@ def time_vectors_to_datetimes(time_vectors):
 
 
 def get_dimensions(nc_resource, var_names=None):
-    if isinstance(var_names, basestring):
+    if isinstance(var_names, str):
         var_names = [var_names]
     d = {}
-    if isinstance(nc_resource, basestring):
+    if isinstance(nc_resource, str):
         ncdataset = netCDF4.Dataset(nc_resource, 'r')
     elif isinstance(nc_resource, netCDF4._netCDF4.Dataset):
         ncdataset = nc_resource
@@ -895,6 +894,7 @@ def create_dummy_netcdf(nc_file, nc_format='NETCDF4_CLASSIC', use_time=True,
     elif fill_mode == 'gradient':
         data1 = np.arange(0, 1.0+0.5/(var1.size-1), 1.0/(var1.size-1))
         data1 = data1*data_scale_factor+data_add_offset
+        num_values = data1.size
         if hasattr(data1, 'count'):
             masked_values = num_values-data1.count()
         else:

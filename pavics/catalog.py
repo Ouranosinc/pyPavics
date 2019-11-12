@@ -14,7 +14,7 @@ import copy
 import json
 import requests
 import logging
-import urlparse
+from urllib.parse import urlparse
 
 import threddsclient
 import netCDF4
@@ -272,7 +272,7 @@ def thredds_crawler(thredds_server, index_facets, depth=50,
     add_data = []
     targets_found = []
 
-    opendap_hostname = urlparse.urlparse(thredds_server).hostname
+    opendap_hostname = urlparse(thredds_server).hostname
     with netcdfcookie.NetCDFCookie(headers, [opendap_hostname, ],
                                    verify=verify):
         for thredds_dataset in threddsclient.crawl(thredds_server, depth=depth,
