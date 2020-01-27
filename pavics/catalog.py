@@ -123,6 +123,8 @@ def solr_add_field(solr_server, field_name, field_type='string',
                                    'stored': 'true'}}
     headers = {'Content-type': 'application/json'}
     r = requests.post(schema_path, data=json.dumps(add_field), headers=headers)
+    logger.debug("solr_add_field data=%r headers=$%r" % (json.dumps(add_field), headers))
+    logger.debug("solr_add_field result=$%r" % r.text)
     return r.json()
 
 
@@ -149,6 +151,7 @@ def solr_update(solr_server, update_data):
     # search for fields that do not yet exist in Solr and add them
     solr_call = os.path.join(solr_server, 'schema', 'fields?wt=json')
     r = requests.get(solr_call)
+    logger.debug("solr_update schema_fields result=%r" % r.text)
     if not r.ok:
         r.raise_for_status()
     solr_fields = r.json()
@@ -172,6 +175,8 @@ def solr_update(solr_server, update_data):
     solr_json_input = json.dumps(update_data)
     headers = {'Content-type': 'application/json'}
     r = requests.post(solr_call, data=solr_json_input, headers=headers)
+    logger.debug("solr_update update_json data=%r headers=$%r" % (solr_json_input, headers))
+    logger.debug("solr_update update_json result=%r" % r.text)
     if not r.ok:
         r.raise_for_status()
     update_result = r.json()
