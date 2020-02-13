@@ -973,12 +973,15 @@ def pavicsearch(solr_server, facets=None, offset=0, limit=10, fields=None,
     solr_search += "&wt=json"
     solr_search += "&indent=true"
     solr_search_url = solr_url + solr_search.lstrip('&')
+    logger.debug("pavicsearch solr_search_url=%r" % solr_search_url)
     r = requests.get(solr_search_url)
+    logger.debug("pavicsearch solr_search_url result=%r" % r.text)
     if not r.ok:
         r.raise_for_status()
     solr_result = r.json()
     solr_result = restructure_type(solr_result, add_default_min_max,
                                    search_type)
+    logger.debug("pavicsearch solr_result=%r" % solr_result)
     return (solr_result, solr_search_url)
 
 
